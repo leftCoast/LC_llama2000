@@ -1,7 +1,7 @@
 #include "LC_lama_NMEA200.h"
 
 
-int bytesToInt(byte hiByte,int lowByte) {
+int bytesTo16Int(byte hiByte,int lowByte) {
   
    struct int16 {
       byte lowByte;
@@ -17,13 +17,34 @@ int bytesToInt(byte hiByte,int lowByte) {
    return(value);
 }
 
+int bytesTo32int(byte hiByte,byte byte2,byte byte1,byte lowByte) {
+  
+   struct int32 {
+      byte byte0;
+      byte byte1;
+      byte byte2;
+      byte byte3;
+   };
+   int32*   bytes;
+   uint32_t value;
+
+   value = 0;                    // Shut up compiler.
+   bytes = (int32*)&value;
+   bytes->byte3 = hiByte;
+   bytes->byte2 = byte2;
+   bytes->byte1 = byte1;
+   bytes->byte0 = lowByte;
+   return(value);
+}
+
 
 CANMessage* createMsgObj(msgTypes inType) {
 
    switch(inType) {
-      case noType     : return NULL;
-      case waterSpeed : return (CANMessage*) new waterSpeedObj;
-      case waterDepth : return NULL; //(CANMessage*) new waterDepthObj;
+      case noType       : return NULL;
+      case waterSpeed   : return (CANMessage*) new waterSpeedObj;
+      case waterDepth   : return (CANMessage*) new waterDepthObj;
+      case waterTemp    : return (CANMessage*) new waterTempObj;
    }
    return NULL;
 }
@@ -115,6 +136,7 @@ void lama_NMEA200::idle(void) {
   if (packetSize) {
     theID = CAN.packetId();
     readAddress (theID, &msg);
+    //Serial.println(msg.pgn,HEX);
     decodeObj = (CANMessage*)getMsgObj(msg.pgn);
     if (decodeObj) {
       i = 0;
@@ -159,7 +181,14 @@ msgTypes CANMessage::getType(void) { return msgType; }
 
 uint32_t CANMessage::getPGN(void) { return msgPGN; }
 
-
+void CANMessage::showDataBytes(void) {
+   
+   for (int i=0;i<NUM_DATA_BYTES;i++) {
+      Serial.print(dataBytes[i],DEC);
+      Serial.print("\t");
+   }
+   Serial.println();
+}
  
 // ************* waterSpeedObj *************
 
@@ -180,7 +209,7 @@ void waterSpeedObj::decodeMessage(void) {
 
   unsigned int rawSpeed;
   
-  rawSpeed = (unsigned int) bytesToInt(dataBytes[2],dataBytes[1]);
+  rawSpeed = (unsigned int) bytesTo16Int(dataBytes[2],dataBytes[1]);
   knots = speedMap.map(rawSpeed);
 }
 
@@ -195,9 +224,8 @@ float waterSpeedObj::getSpeed(void) { return knots; }
 waterDepthObj::waterDepthObj(void) {
 
   msgType = waterDepth;
-  msgPGN  = 0x1F503;
-  depth   = 0;
-  depthMap.setValues(0,1023,0,0);
+  msgPGN  = 0x1F50B;
+  feet   = 0;
 }
 
 
@@ -208,10 +236,39 @@ void waterDepthObj::decodeMessage(void) {
 
   unsigned int rawDepth;
   
-  rawDepth = (unsigned int) bytesToInt(dataBytes[2],dataBytes[1]);
-  feet = speedMap.map(rawDepth);
+  rawDepth = (unsigned int) bytesTo32int(dataBytes[4],dataBytes[3],dataBytes[2],dataBytes[1]);
+  rawDepth = rawDepth / 100.0;     // Give meters.
+  feet = rawDepth * 3.28084;     // Give feet
 }
 
   
-float waterSpeedObj::getSpeed(void) { return feet; }
+float waterDepthObj::getDepth(void) { return feet; }
+
+
+
+// ************* waterTempObj *************
+
+
+waterTempObj::waterTempObj(void) {
+
+   msgType  = waterTemp;
+   msgPGN   = 0x1FD08;
+   degF     = 0;
+}
+
+
+waterTempObj::~waterTempObj(void) {  }
+
+
+void waterTempObj::decodeMessage(void) {
+
+   unsigned int rawTemp;
+
+   rawTemp  = (unsigned int) (unsigned int) bytesTo16Int(dataBytes[4],dataBytes[3]);
+   degF  = rawTemp / 100.0;         // Give kelvan.
+   degF  = (degF * 1.8) - 459.67;   // Give degF.
+}
+
+  
+float waterTempObj::getTemp(void) { return degF; }
           

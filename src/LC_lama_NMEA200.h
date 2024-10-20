@@ -12,7 +12,8 @@
 enum msgTypes { 
   noType,
   waterSpeed,
-  waterDepth
+  waterDepth,
+  waterTemp
 };
 
 
@@ -63,11 +64,11 @@ class CANMessage  : public linkListObj {
             CANMessage(void);
             ~CANMessage(void);
 
-            msgTypes  getType(void);
-            uint32_t  getPGN(void);
-            void      readMessage(void);
-   virtual  void      decodeMessage(void)=0;
-            
+            msgTypes getType(void);
+            uint32_t getPGN(void);
+            //void     readMessage(void);
+   virtual  void     decodeMessage(void)=0;
+            void     showDataBytes(void);
             byte     dataBytes[NUM_DATA_BYTES];
             
    protected:
@@ -111,8 +112,26 @@ class waterDepthObj  : public CANMessage {
   protected:
   virtual void  decodeMessage(void);
              
-          mapper  depthMap;
           float   feet;
 };
+
+
+// ************* waterTempObj *************
+
+
+class waterTempObj  : public CANMessage {
+
+   public:
+            waterTempObj(void);
+            ~waterTempObj(void);
+          
+            float getTemp(void);
+          
+   protected:
+   virtual  void  decodeMessage(void);
+             
+            float   degF;
+};
+
 
 #endif
