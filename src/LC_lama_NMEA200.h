@@ -32,25 +32,24 @@ class CANMessage;
 // ************ lama_NMEA200 ************
 
 
-class lama_NMEA200  : public linkList,
-                      public idler {
+class lama_NMEA200 : public linkList,
+                     public idler {
+   public:
+            lama_NMEA200(int inResetPin=DEF_2515_RST_PIN,int inIntPin=DEF_2515_INT_PIN);
+            ~lama_NMEA200(void);
 
-  public:
-    lama_NMEA200(int inResetPin=DEF_2515_RST_PIN,int inIntPin=DEF_2515_INT_PIN);
-    ~lama_NMEA200(void);
-
-    bool        begin(int inCSPin);
-    bool        addMsgObj(msgTypes inType);
-    CANMessage* getMsgObj(uint32_t inType);
-    CANMessage* getMsgObj(msgTypes inType);
-    void        idle(void);
+            bool        begin(int inCSPin);
+            bool        addMsgObj(msgTypes inType);
+            CANMessage* getMsgObj(uint32_t inType);
+            CANMessage* getMsgObj(msgTypes inType);
+   virtual  void        idle(void);
     
-  protected:
-    void        readAddress(uint32_t can_id, msg_t * msg);
+   protected:
+            void        readAddress(uint32_t can_id, msg_t * msg);
     
-    int   resetPin;
-    int   intPin;
-    msg_t msg;
+            int   resetPin;
+            int   intPin;
+            msg_t msg;
 };
 
 
@@ -60,32 +59,32 @@ class lama_NMEA200  : public linkList,
 
 class CANMessage  : public linkListObj {
 
-  public:
-          CANMessage(void);
-          ~CANMessage(void);
+   public:
+            CANMessage(void);
+            ~CANMessage(void);
 
-          msgTypes  getType(void);
-          uint32_t  getPGN(void);
-          void      readMessage(void);
-  virtual void      decodeMessage(void)=0;
-   
-
-  protected:
-    msgTypes  msgType;
-    uint32_t  msgPGN;
-    byte      dataBytes[NUM_DATA_BYTES];
+            msgTypes  getType(void);
+            uint32_t  getPGN(void);
+            void      readMessage(void);
+   virtual  void      decodeMessage(void)=0;
+            
+            byte     dataBytes[NUM_DATA_BYTES];
+            
+   protected:
+            msgTypes msgType;
+            uint32_t msgPGN;
 };
 
 
 
-// ************* waterSpeedOBj *************
+// ************* waterSpeedObj *************
 
 
-class waterSpeedOBj  : public CANMessage {
+class waterSpeedObj  : public CANMessage {
 
   public:
-          waterSpeedOBj(void);
-          ~waterSpeedOBj(void);
+          waterSpeedObj(void);
+          ~waterSpeedObj(void);
           
           float getSpeed(void);
           
@@ -96,5 +95,24 @@ class waterSpeedOBj  : public CANMessage {
           float   knots;
 };
 
+
+
+// ************* waterDepthObj *************
+
+
+class waterDepthObj  : public CANMessage {
+
+  public:
+          waterDepthObj(void);
+          ~waterDepthObj(void);
+          
+          float getDepth(void);
+          
+  protected:
+  virtual void  decodeMessage(void);
+             
+          mapper  depthMap;
+          float   feet;
+};
 
 #endif

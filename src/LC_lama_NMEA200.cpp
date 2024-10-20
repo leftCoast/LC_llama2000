@@ -3,28 +3,29 @@
 
 int bytesToInt(byte hiByte,int lowByte) {
   
-  struct int16 {
-    byte lowByte;
-    byte hiByte;
-  };
-  int16*  bytes;
-  int     value;
+   struct int16 {
+      byte lowByte;
+      byte hiByte;
+   };
+   int16*   bytes;
+   int      value;
 
-  bytes = (int16*)&value;
-  bytes.lowByte = lowByte;
-  bytes.hiByte = hiByte;
-  return(value);
+   value = 0;                    // Shut up compiler.
+   bytes = (int16*)&value;
+   bytes->lowByte = lowByte;
+   bytes->hiByte = hiByte;
+   return(value);
 }
 
 
-CANMessage* createMsgObj(msgType inType) {
+CANMessage* createMsgObj(msgTypes inType) {
 
-  switch(inType) {
-    case noType     : return NULL;
-    case waterSpeed : return (CANMessage*) new waterSpeedObj();
-    case waterDepth : return (CANMessage*) new waterDepthObj();
-  }
-  return NULL;
+   switch(inType) {
+      case noType     : return NULL;
+      case waterSpeed : return (CANMessage*) new waterSpeedObj;
+      case waterDepth : return NULL; //(CANMessage*) new waterDepthObj;
+   }
+   return NULL;
 }
 
 
@@ -32,7 +33,7 @@ CANMessage* createMsgObj(msgType inType) {
 // ************ lama_NMEA200 ************
 
 
-lama_NMEA200::lama_NMEA200(int inResetPin=DEF_2515_RST_PIN,int inIntPin=DEF_2515_INT_PIN)
+lama_NMEA200::lama_NMEA200(int inResetPin,int inIntPin)
   : linkList(),
   idler() {
 
@@ -71,7 +72,7 @@ CANMessage* lama_NMEA200::getMsgObj(uint32_t inPGN) {
 }
 
 
-CANMessage* lama_NMEA200::getMsgObj(NMEAType inType) {
+CANMessage* lama_NMEA200::getMsgObj(msgTypes inType) {
 
   CANMessage* trace;
   
@@ -86,15 +87,19 @@ CANMessage* lama_NMEA200::getMsgObj(NMEAType inType) {
 }
 
 
-bool lama_NMEA200::addMsgObj(msgType inType) {
+bool lama_NMEA200::addMsgObj(msgTypes inType) {
 
-  CANMessage* newMsgObj;
+   CANMessage* newMsgObj;
   
-  if (!getMsgObj(inType)) {
-    newMsgObj = createMsgObj(inType);
-    if (newMsgObj) {
-      addToTop(newMsgObj);
-    }
+   if (!getMsgObj(inType)) {
+      newMsgObj = createMsgObj(inType);
+      if (!newMsgObj) {
+          return false;
+      } else {
+         addToTop(newMsgObj);
+      }
+   }
+   return true;
 }
 
 
@@ -114,7 +119,7 @@ void lama_NMEA200::idle(void) {
     if (decodeObj) {
       i = 0;
       while (CAN.available()&&i<NUM_DATA_BYTES) {
-        decodeObj->dataPack[i] = CAN.read();
+        decodeObj->dataBytes[i] = CAN.read();
         i++;
       }
       decodeObj->decodeMessage();
@@ -143,8 +148,6 @@ void lama_NMEA200::readAddress (uint32_t can_id, msg_t* msg) {
 CANMessage::CANMessage(void)
   : linkListObj() {  
   
-  dataBytes = NULL;
-  numBytes = 0;
   msgType = noType;
   msgPGN  = 0;
 }
@@ -152,16 +155,16 @@ CANMessage::CANMessage(void)
 
 CANMessage::~CANMessage(void) {  }
 
-NMEAType CANMessage::getType(void) { return msgType; }
+msgTypes CANMessage::getType(void) { return msgType; }
 
 uint32_t CANMessage::getPGN(void) { return msgPGN; }
 
 
  
-// ************* waterSpeedOBj *************
+// ************* waterSpeedObj *************
 
 
-waterSpeedOBj::waterSpeedOBj(void) {
+waterSpeedObj::waterSpeedObj(void) {
 
   msgType = waterSpeed;
   msgPGN  = 0x1F503;
@@ -170,17 +173,45 @@ waterSpeedOBj::waterSpeedOBj(void) {
 }
 
 
-waterSpeedOBj::~waterSpeedOBj(void) {  }
+waterSpeedObj::~waterSpeedObj(void) {  }
 
 
-void waterSpeedOBj::decodeMessage(void) {
+void waterSpeedObj::decodeMessage(void) {
 
   unsigned int rawSpeed;
   
-  rawSpeed = (unsigned int) bytesToInt(dataPack[2],dataPack[1]);
+  rawSpeed = (unsigned int) bytesToInt(dataBytes[2],dataBytes[1]);
   knots = speedMap.map(rawSpeed);
 }
 
   
-float waterSpeedOBj::getSpeed(void) { return knots; }
+float waterSpeedObj::getSpeed(void) { return knots; }
+
+
+
+// ************* waterDepthObj *************
+
+
+waterDepthObj::waterDepthObj(void) {
+
+  msgType = waterDepth;
+  msgPGN  = 0x1F503;
+  depth   = 0;
+  depthMap.setValues(0,1023,0,0);
+}
+
+
+waterDepthObj::~waterDepthObj(void) {  }
+
+
+void waterDepthObj::decodeMessage(void) {
+
+  unsigned int rawDepth;
+  
+  rawDepth = (unsigned int) bytesToInt(dataBytes[2],dataBytes[1]);
+  feet = speedMap.map(rawDepth);
+}
+
+  
+float waterSpeedObj::getSpeed(void) { return feet; }
           
