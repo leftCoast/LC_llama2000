@@ -1,4 +1,6 @@
-#include "LC_lama_NMEA200.h"
+#include <LC_lama_NMEA200.h>
+#include <resizeBuff.h>
+
 
 
 int bytesTo16Int(byte hiByte,int lowByte) {
@@ -126,27 +128,28 @@ bool lama_NMEA200::addMsgObj(msgTypes inType) {
 
 void lama_NMEA200::idle(void) {
 
-  int         packetSize;
-  uint32_t    theID;
-  msg_t       msg;
-  CANMessage* decodeObj;
-  int         i;
-  
-  packetSize = CAN.parsePacket();
-  if (packetSize) {
-    theID = CAN.packetId();
-    readAddress (theID, &msg);
-    //Serial.println(msg.pgn,HEX);
-    decodeObj = (CANMessage*)getMsgObj(msg.pgn);
-    if (decodeObj) {
-      i = 0;
-      while (CAN.available()&&i<NUM_DATA_BYTES) {
-        decodeObj->dataBytes[i] = CAN.read();
-        i++;
+   int         packetSize;
+   uint32_t    theID;
+   msg_t       msg;
+   CANMessage* decodeObj;
+   int         i;
+   int          numBytes;
+
+   packetSize = CAN.parsePacket();
+   if (packetSize) {
+      theID = CAN.packetId();
+      readAddress (theID, &msg);
+      decodeObj = (CANMessage*)getMsgObj(msg.pgn);
+      if (decodeObj) {
+         numBytes = decodeObj->getNumBytes();
+         i = 0;
+         while (CAN.available()&&i<numBytes) {
+            decodeObj->dataBytes[i] = CAN.read();
+            i++;
+         }
+         decodeObj->decodeMessage();
       }
-      decodeObj->decodeMessage();
-    }
-  }
+   }
 }
 
 
@@ -167,33 +170,46 @@ void lama_NMEA200::readAddress (uint32_t can_id, msg_t* msg) {
 // ************* CANMessage *************
 
 
-CANMessage::CANMessage(void)
-  : linkListObj() {  
-  
-  msgType = noType;
-  msgPGN  = 0;
+CANMessage::CANMessage(int inNumBytes)
+   : linkListObj() {
+
+   msgType = noType;
+   msgPGN  = 0;
+   numBytes = 0;
+   dataBytes = NULL;
+   Serial.print("Num data bytes : ");
+   Serial.println(inNumBytes);
+   if (resizeBuff(inNumBytes,&dataBytes)) {
+   numBytes = inNumBytes;
+  }
 }
 
 
-CANMessage::~CANMessage(void) {  }
+CANMessage::~CANMessage(void) { resizeBuff(0,&dataBytes); }
 
 msgTypes CANMessage::getType(void) { return msgType; }
 
 uint32_t CANMessage::getPGN(void) { return msgPGN; }
 
+int CANMessage::getNumBytes(void) { return numBytes; }
+
+
 void CANMessage::showDataBytes(void) {
    
-   for (int i=0;i<NUM_DATA_BYTES;i++) {
+   for (int i=0;i<numBytes;i++) {
       Serial.print(dataBytes[i],DEC);
       Serial.print("\t");
    }
    Serial.println();
 }
  
+ 
+ 
 // ************* waterSpeedObj *************
 
 
-waterSpeedObj::waterSpeedObj(void) {
+waterSpeedObj::waterSpeedObj(void)
+   : CANMessage() {
 
   msgType = waterSpeed;
   msgPGN  = 0x1F503;
@@ -221,7 +237,8 @@ float waterSpeedObj::getSpeed(void) { return knots; }
 // ************* waterDepthObj *************
 
 
-waterDepthObj::waterDepthObj(void) {
+waterDepthObj::waterDepthObj(void)
+   : CANMessage() {
 
   msgType = waterDepth;
   msgPGN  = 0x1F50B;
@@ -249,7 +266,8 @@ float waterDepthObj::getDepth(void) { return feet; }
 // ************* waterTempObj *************
 
 
-waterTempObj::waterTempObj(void) {
+waterTempObj::waterTempObj(void)
+   : CANMessage() {
 
    msgType  = waterTemp;
    msgPGN   = 0x1FD08;

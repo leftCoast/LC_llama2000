@@ -5,11 +5,12 @@
 #include  <mapper.h>
 #include  <CAN.h>
 
-#define DEF_2515_RST_PIN  8
-#define DEF_2515_INT_PIN  2
-#define NUM_DATA_BYTES    8
+#define DEF_2515_RST_PIN   8
+#define DEF_2515_INT_PIN   2
+#define DEF_NUM_DATA_BYTES 8
 
-enum msgTypes { 
+
+enum msgTypes {
   noType,
   waterSpeed,
   waterDepth,
@@ -26,8 +27,8 @@ struct msg_t {
 };
 
 
-class CANMessage;
 
+class CANMessage;
 
 
 // ************ lama_NMEA200 ************
@@ -61,17 +62,17 @@ class lama_NMEA200 : public linkList,
 class CANMessage  : public linkListObj {
 
    public:
-            CANMessage(void);
+            CANMessage(int inNumBytes=DEF_NUM_DATA_BYTES);
             ~CANMessage(void);
 
             msgTypes getType(void);
             uint32_t getPGN(void);
-            //void     readMessage(void);
+            int      getNumBytes(void);
    virtual  void     decodeMessage(void)=0;
             void     showDataBytes(void);
-            byte     dataBytes[NUM_DATA_BYTES];
             
-   protected:
+            byte*    dataBytes;
+            int      numBytes;
             msgTypes msgType;
             uint32_t msgPGN;
 };
