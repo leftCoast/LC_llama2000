@@ -1,4 +1,4 @@
-#include <LC_lama_NMEA200.h>
+#include <LC_llama_NMEA200.h>
 #include <resizeBuff.h>
 
 
@@ -40,14 +40,14 @@ int swap32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
 }
 
 
-CANMessage* createMsgObj(msgTypes inType) {
+CANMsgObj* createMsgObj(msgTypes inType) {
 
    switch(inType) {
       case noType       : return NULL;
-      case waterSpeed   : return (CANMessage*) new waterSpeedObj;
-      case waterDepth   : return (CANMessage*) new waterDepthObj;
-      case waterTemp    : return (CANMessage*) new waterTempObj;
-      case fluidLevel    : return (CANMessage*) new fluidLevelObj;
+      case waterSpeed   : return (CANMsgObj*) new waterSpeedObj;
+      case waterDepth   : return (CANMsgObj*) new waterDepthObj;
+      case waterTemp    : return (CANMsgObj*) new waterTempObj;
+      case fluidLevel    : return (CANMsgObj*) new fluidLevelObj;
    }
    return NULL;
 }
@@ -56,10 +56,10 @@ uint32_t makeAddress (uint32_t pgn, uint8_t priority, uint8_t source) {
   return ((pgn << 8) | priority << 26) | source;
 }
 
-// ************ lama_NMEA200 ************
+// ************ llama_NMEA200 ************
 
 
-lama_NMEA200::lama_NMEA200(int inResetPin,int inIntPin)
+llama_NMEA200::llama_NMEA200(int inResetPin,int inIntPin)
   : linkList(),
   idler() {
 
@@ -68,10 +68,10 @@ lama_NMEA200::lama_NMEA200(int inResetPin,int inIntPin)
 }
 
 
-lama_NMEA200::~lama_NMEA200(void) {  }
+llama_NMEA200::~llama_NMEA200(void) {  }
 
 
-bool lama_NMEA200::begin(int inCSPin) {
+bool llama_NMEA200::begin(int inCSPin) {
 
   hookup();
   pinMode(resetPin, OUTPUT);
@@ -83,39 +83,39 @@ bool lama_NMEA200::begin(int inCSPin) {
 }
 
 
-CANMessage* lama_NMEA200::getMsgObj(uint32_t inPGN) {
+CANMsgObj* llama_NMEA200::getMsgObj(uint32_t inPGN) {
 
-  CANMessage* trace;
+  CANMsgObj* trace;
   
-  trace = (CANMessage*)getFirst();
+  trace = (CANMsgObj*)getFirst();
   while(trace) {
     if (trace->getPGN()==inPGN) {
       return trace;
     }
-    trace = (CANMessage*)trace->getNext();
+    trace = (CANMsgObj*)trace->getNext();
   }
   return NULL;
 }
 
 
-CANMessage* lama_NMEA200::getMsgObj(msgTypes inType) {
+CANMsgObj* llama_NMEA200::getMsgObj(msgTypes inType) {
 
-  CANMessage* trace;
+  CANMsgObj* trace;
   
-  trace = (CANMessage*)getFirst();
+  trace = (CANMsgObj*)getFirst();
   while(trace) {
     if (trace->getType()==inType) {
       return trace;
     }
-    trace = (CANMessage*)trace->getNext();
+    trace = (CANMsgObj*)trace->getNext();
   }
   return NULL;
 }
 
 
-bool lama_NMEA200::addMsgObj(msgTypes inType) {
+bool llama_NMEA200::addMsgObj(msgTypes inType) {
 
-   CANMessage* newMsgObj;
+   CANMsgObj* newMsgObj;
   
    if (!getMsgObj(inType)) {
       newMsgObj = createMsgObj(inType);
@@ -129,12 +129,12 @@ bool lama_NMEA200::addMsgObj(msgTypes inType) {
 }
 
 
-void lama_NMEA200::idle(void) {
+void llama_NMEA200::idle(void) {
 
    int         packetSize;
    uint32_t    theID;
    msg_t       msg;
-   CANMessage* decodeObj;
+   CANMsgObj* decodeObj;
    int         i;
    int          numBytes;
 
@@ -142,7 +142,7 @@ void lama_NMEA200::idle(void) {
    if (packetSize) {
       theID = CAN.packetId();
       readAddress (theID, &msg);
-      decodeObj = (CANMessage*)getMsgObj(msg.pgn);
+      decodeObj = (CANMsgObj*)getMsgObj(msg.pgn);
       if (decodeObj) {
          numBytes = decodeObj->getNumBytes();
          i = 0;
@@ -156,7 +156,7 @@ void lama_NMEA200::idle(void) {
 }
 
 
-void lama_NMEA200::readAddress (uint32_t can_id, msg_t* msg) {
+void llama_NMEA200::readAddress (uint32_t can_id, msg_t* msg) {
   
   uint32_t buffer = can_id;
   
@@ -170,10 +170,10 @@ void lama_NMEA200::readAddress (uint32_t can_id, msg_t* msg) {
 
 
 
-// ************* CANMessage *************
+// ************* CANMsgObj *************
 
 
-CANMessage::CANMessage(int inNumBytes)
+CANMsgObj::CANMsgObj(int inNumBytes)
    : linkListObj() {
 
    msgType = noType;
@@ -188,16 +188,16 @@ CANMessage::CANMessage(int inNumBytes)
 }
 
 
-CANMessage::~CANMessage(void) { resizeBuff(0,&dataBytes); }
+CANMsgObj::~CANMsgObj(void) { resizeBuff(0,&dataBytes); }
 
-msgTypes CANMessage::getType(void) { return msgType; }
+msgTypes CANMsgObj::getType(void) { return msgType; }
 
-uint32_t CANMessage::getPGN(void) { return msgPGN; }
+uint32_t CANMsgObj::getPGN(void) { return msgPGN; }
 
-int CANMessage::getNumBytes(void) { return numBytes; }
+int CANMsgObj::getNumBytes(void) { return numBytes; }
 
 
-void CANMessage::showDataBytes(void) {
+void CANMsgObj::showDataBytes(void) {
    
    for (int i=0;i<numBytes;i++) {
       Serial.print(dataBytes[i],DEC);
@@ -212,7 +212,7 @@ void CANMessage::showDataBytes(void) {
 
 
 waterSpeedObj::waterSpeedObj(void)
-   : CANMessage() {
+   : CANMsgObj() {
 
   msgType = waterSpeed;
   msgPGN  = 0x1F503;
@@ -244,7 +244,7 @@ void waterSpeedObj::sendMessage(void) { }
 
 
 waterDepthObj::waterDepthObj(void)
-   : CANMessage() {
+   : CANMsgObj() {
 
   msgType = waterDepth;
   msgPGN  = 0x1F50B;
@@ -276,7 +276,7 @@ void waterDepthObj::sendMessage(void) { }
 
 
 waterTempObj::waterTempObj(void)
-   : CANMessage() {
+   : CANMsgObj() {
 
    msgType  = waterTemp;
    msgPGN   = 0x1FD08;
@@ -307,7 +307,7 @@ void waterTempObj::sendMessage(void) { }
 
 
  fluidLevelObj::fluidLevelObj(void) 
-   : CANMessage() {
+   : CANMsgObj() {
    
    msgType  = fluidLevel;
    msgPGN   = 0x1F211;
@@ -367,8 +367,8 @@ void fluidLevelObj::sendMessage(void) {
    dataBytes[5] = (tempLong & 0x00FF0000)>>16;
    dataBytes[6] = (tempLong & 0xFF000000)>>24;
    dataBytes[7] = 0xFF;                            // Reserved, so..
-   Serial.println("Data set we are going to send");
-   showDataBytes();
+   //Serial.println("Data set we are going to send");
+   //showDataBytes();
    CAN.beginExtendedPacket(address);
    for (int i=0;i<7;i++) {
       CAN.write(dataBytes[i]);

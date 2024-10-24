@@ -1,5 +1,5 @@
-#ifndef LC_lama_NMEA200_h
-#define LC_lama_NMEA200_h
+#ifndef LC_llama_NMEA200_h
+#define LC_llama_NMEA200_h
 
 #include  <idlers.h>
 #include  <mapper.h>
@@ -37,22 +37,22 @@ struct msg_t {
 
 
 
-class CANMessage;
+class CANMsgObj;
 
 
-// ************ lama_NMEA200 ************
+// ************ llama_NMEA200 ************
 
 
-class lama_NMEA200 : public linkList,
+class llama_NMEA200 : public linkList,
                      public idler {
    public:
-            lama_NMEA200(int inResetPin=DEF_2515_RST_PIN,int inIntPin=DEF_2515_INT_PIN);
-            ~lama_NMEA200(void);
+            llama_NMEA200(int inResetPin=DEF_2515_RST_PIN,int inIntPin=DEF_2515_INT_PIN);
+            ~llama_NMEA200(void);
 
             bool        begin(int inCSPin);
             bool        addMsgObj(msgTypes inType);
-            CANMessage* getMsgObj(uint32_t inType);
-            CANMessage* getMsgObj(msgTypes inType);
+            CANMsgObj* getMsgObj(uint32_t inType);
+            CANMsgObj* getMsgObj(msgTypes inType);
    virtual  void        idle(void);
     
    protected:
@@ -65,14 +65,14 @@ class lama_NMEA200 : public linkList,
 
 
 
-// ************* CANMessage *************
+// ************* CANMsgObj *************
 
 
-class CANMessage  : public linkListObj {
+class CANMsgObj  : public linkListObj {
 
    public:
-            CANMessage(int inNumBytes=DEF_NUM_DATA_BYTES);
-            ~CANMessage(void);
+            CANMsgObj(int inNumBytes=DEF_NUM_DATA_BYTES);
+            ~CANMsgObj(void);
 
             msgTypes getType(void);
             uint32_t getPGN(void);
@@ -92,7 +92,7 @@ class CANMessage  : public linkListObj {
 // ************* waterSpeedObj *************
 
 
-class waterSpeedObj  : public CANMessage {
+class waterSpeedObj  : public CANMsgObj {
 
    public:
           waterSpeedObj(void);
@@ -113,7 +113,7 @@ class waterSpeedObj  : public CANMessage {
 // ************* waterDepthObj *************
 
 
-class waterDepthObj  : public CANMessage {
+class waterDepthObj  : public CANMsgObj {
 
    public:
           waterDepthObj(void);
@@ -134,7 +134,7 @@ class waterDepthObj  : public CANMessage {
 // ************* waterTempObj *************
 
 
-class waterTempObj  : public CANMessage {
+class waterTempObj  : public CANMsgObj {
 
    public:
             waterTempObj(void);
@@ -154,7 +154,7 @@ class waterTempObj  : public CANMessage {
 // ************* fluidLevelObj *************
 
 
-class fluidLevelObj  : public CANMessage {
+class fluidLevelObj  : public CANMsgObj {
 
    public:
             fluidLevelObj(void);
