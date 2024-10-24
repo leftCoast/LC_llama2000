@@ -12,11 +12,20 @@
 
 enum msgTypes {
   noType,
-  waterSpeed,
-  waterDepth,
-  waterTemp
+  waterSpeed,  // 0x1F503
+  waterDepth,  // 0x1F50B
+  waterTemp,   // 0x1FD08
+  fluidLevel   // 0x1F211
 };
 
+enum tankType {
+   fuel,
+   water,
+   grayWater,
+   liveWell,
+   oil,
+   blackWater
+};
 
 struct msg_t {
   uint32_t  pgn;
@@ -70,6 +79,7 @@ class CANMessage  : public linkListObj {
             int      getNumBytes(void);
    virtual  void     decodeMessage(void)=0;
             void     showDataBytes(void);
+   virtual  void     sendMessage(void)=0;
             
             byte*    dataBytes;
             int      numBytes;
@@ -84,14 +94,15 @@ class CANMessage  : public linkListObj {
 
 class waterSpeedObj  : public CANMessage {
 
-  public:
+   public:
           waterSpeedObj(void);
           ~waterSpeedObj(void);
           
-          float getSpeed(void);
-          
-  protected:
-  virtual void  decodeMessage(void);
+            float getSpeed(void);
+   virtual  void  sendMessage(void);
+   
+   protected:
+   virtual  void  decodeMessage(void);
              
           mapper  speedMap;
           float   knots;
@@ -104,16 +115,19 @@ class waterSpeedObj  : public CANMessage {
 
 class waterDepthObj  : public CANMessage {
 
-  public:
+   public:
           waterDepthObj(void);
           ~waterDepthObj(void);
           
-          float getDepth(void);
+            float getDepth(void);
+   virtual  void  sendMessage(void);
+   
+   protected:
+  virtual   void  decodeMessage(void);
+  
+  
+            float feet;
           
-  protected:
-  virtual void  decodeMessage(void);
-             
-          float   feet;
 };
 
 
@@ -127,11 +141,46 @@ class waterTempObj  : public CANMessage {
             ~waterTempObj(void);
           
             float getTemp(void);
-          
+   virtual  void  sendMessage(void);
+   
    protected:
    virtual  void  decodeMessage(void);
-             
+   
             float   degF;
+};
+
+
+
+// ************* fluidLevelObj *************
+
+
+class fluidLevelObj  : public CANMessage {
+
+   public:
+            fluidLevelObj(void);
+            ~fluidLevelObj(void);
+          
+            byte     getInstance(void);
+            void     setInstance(byte inInstance);
+            tankType getTankType(void);
+            void     setTankType(tankType inType);
+            float    getLevel(void);
+            void     setLevel(float inLevel);
+            float    getCapacity(void);
+            void     setCapacity(float inCapacity);
+            virtual  void     sendMessage(void);
+            
+   protected:
+   virtual  void     decodeMessage(void);
+   
+             
+            byte     instance;
+            tankType fluidType;
+            float    level;
+            float    capacity;
+            int      tankID;
+            //float    autoPeriod;
+            //mapper   periodTimer;
 };
 
 

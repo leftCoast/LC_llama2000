@@ -3,7 +3,7 @@
 
 
 
-int bytesTo16Int(byte hiByte,int lowByte) {
+int swap16(byte hiByte,int lowByte) {
   
    struct int16 {
       byte lowByte;
@@ -19,7 +19,7 @@ int bytesTo16Int(byte hiByte,int lowByte) {
    return(value);
 }
 
-int bytesTo32int(byte hiByte,byte byte2,byte byte1,byte lowByte) {
+int swap32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
   
    struct int32 {
       byte byte0;
@@ -47,11 +47,14 @@ CANMessage* createMsgObj(msgTypes inType) {
       case waterSpeed   : return (CANMessage*) new waterSpeedObj;
       case waterDepth   : return (CANMessage*) new waterDepthObj;
       case waterTemp    : return (CANMessage*) new waterTempObj;
+      case fluidLevel    : return (CANMessage*) new fluidLevelObj;
    }
    return NULL;
 }
 
-
+uint32_t makeAddress (uint32_t pgn, uint8_t priority, uint8_t source) {
+  return ((pgn << 8) | priority << 26) | source;
+}
 
 // ************ lama_NMEA200 ************
 
@@ -225,12 +228,15 @@ void waterSpeedObj::decodeMessage(void) {
 
   unsigned int rawSpeed;
   
-  rawSpeed = (unsigned int) bytesTo16Int(dataBytes[2],dataBytes[1]);
+  rawSpeed = (unsigned int) swap16(dataBytes[2],dataBytes[1]);
   knots = speedMap.map(rawSpeed);
 }
 
   
 float waterSpeedObj::getSpeed(void) { return knots; }
+
+
+void waterSpeedObj::sendMessage(void) { }
 
 
 
@@ -253,13 +259,16 @@ void waterDepthObj::decodeMessage(void) {
 
   unsigned int rawDepth;
   
-  rawDepth = (unsigned int) bytesTo32int(dataBytes[4],dataBytes[3],dataBytes[2],dataBytes[1]);
+  rawDepth = (unsigned int) swap32(dataBytes[4],dataBytes[3],dataBytes[2],dataBytes[1]);
   rawDepth = rawDepth / 100.0;     // Give meters.
   feet = rawDepth * 3.28084;     // Give feet
 }
 
   
 float waterDepthObj::getDepth(void) { return feet; }
+
+
+void waterDepthObj::sendMessage(void) { }
 
 
 
@@ -282,7 +291,7 @@ void waterTempObj::decodeMessage(void) {
 
    unsigned int rawTemp;
 
-   rawTemp  = (unsigned int) (unsigned int) bytesTo16Int(dataBytes[4],dataBytes[3]);
+   rawTemp  = (unsigned int) (unsigned int) swap16(dataBytes[4],dataBytes[3]);
    degF  = rawTemp / 100.0;         // Give kelvan.
    degF  = (degF * 1.8) - 459.67;   // Give degF.
 }
@@ -290,3 +299,79 @@ void waterTempObj::decodeMessage(void) {
   
 float waterTempObj::getTemp(void) { return degF; }
           
+
+void waterTempObj::sendMessage(void) { }
+
+
+// ************* fluidLevelObj *************
+
+
+ fluidLevelObj::fluidLevelObj(void) 
+   : CANMessage() {
+   
+   msgType  = fluidLevel;
+   msgPGN   = 0x1F211;
+   
+   instance    = 0;
+   fluidType   = fuel;  // This is 0.
+   level       = 0;
+   capacity    = 0;
+   //periodTimer.setTime(2500);
+}
+ 
+
+fluidLevelObj::~fluidLevelObj(void) {  }
+
+
+byte  fluidLevelObj::getInstance(void) { return instance; }
+
+void  fluidLevelObj::setInstance(byte inInstance) { instance = inInstance; }
+
+tankType fluidLevelObj::getTankType() { return fluidType; }
+
+void fluidLevelObj::setTankType(tankType inType) { fluidType = inType; }
+
+float fluidLevelObj::getLevel(void) { return level; }
+
+void fluidLevelObj::setLevel(float inLevel) { level = inLevel; }
+
+float fluidLevelObj::getCapacity(void) { return capacity; }
+
+void fluidLevelObj::setCapacity(float inCapacity) { capacity = inCapacity; }
+          
+
+void fluidLevelObj::decodeMessage(void) {
+
+
+}
+
+
+void fluidLevelObj::sendMessage(void) {
+   
+   int16_t  tempInt;
+   int32_t  tempLong;
+   uint32_t address;
+   
+   address = makeAddress(msgPGN,6,0);
+   
+   dataBytes[0] = instance & 0b00001111;
+   dataBytes[0] = dataBytes[0]<<4;
+   dataBytes[0] = dataBytes[0] | ((byte)fluidType & 0b00001111);
+   
+   tempInt = round(level*250);
+   dataBytes[1] = tempInt & 0x00FF;
+   dataBytes[2] = (tempInt & 0xFF00)>>8;
+   tempLong = round(capacity * 10);
+   dataBytes[3] = tempLong & 0x000000FF;
+   dataBytes[4] = (tempLong & 0x0000FF00)>>8;
+   dataBytes[5] = (tempLong & 0x00FF0000)>>16;
+   dataBytes[6] = (tempLong & 0xFF000000)>>24;
+   dataBytes[7] = 0xFF;                            // Reserved, so..
+   Serial.println("Data set we are going to send");
+   showDataBytes();
+   CAN.beginExtendedPacket(address);
+   for (int i=0;i<7;i++) {
+      CAN.write(dataBytes[i]);
+   }
+   CAN.endPacket();
+}
