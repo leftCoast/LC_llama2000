@@ -1,9 +1,12 @@
 #ifndef LC_llama_NMEA200_h
 #define LC_llama_NMEA200_h
 
-#include  <idlers.h>
-#include  <mapper.h>
-#include  <CAN.h>
+
+#include <idlers.h>
+#include <mapper.h>
+#include <timeObj.h>
+#include <CAN.h>
+
 
 #define DEF_2515_RST_PIN   8
 #define DEF_2515_INT_PIN   2
@@ -43,17 +46,17 @@ class CANMsgObj;
 // ************ llama_NMEA200 ************
 
 
-class llama_NMEA200 : public linkList,
-                     public idler {
+class llama_NMEA200 :   public linkList,
+                        public idler {
    public:
             llama_NMEA200(int inResetPin=DEF_2515_RST_PIN,int inIntPin=DEF_2515_INT_PIN);
             ~llama_NMEA200(void);
 
             bool        begin(int inCSPin);
-            bool        addMsgObj(msgTypes inType);
-            CANMsgObj* getMsgObj(uint32_t inType);
-            CANMsgObj* getMsgObj(msgTypes inType);
-   virtual  void        idle(void);
+            bool        addMsgObj(msgTypes inType,int inInstance=0);
+            CANMsgObj*  getMsgObj(uint32_t inType,int inInstance=0);
+            CANMsgObj*  getMsgObj(msgTypes inType,int inInstance=0);
+   virtual  void        idle(void); // Watches for new data.
     
    protected:
             void        readAddress(uint32_t can_id, msg_t * msg);
@@ -68,7 +71,7 @@ class llama_NMEA200 : public linkList,
 // ************* CANMsgObj *************
 
 
-class CANMsgObj  : public linkListObj {
+class CANMsgObj : public linkListObj {     Sadly this can NOT inherit from idler. Deal with it.
 
    public:
             CANMsgObj(int inNumBytes=DEF_NUM_DATA_BYTES);
@@ -76,15 +79,21 @@ class CANMsgObj  : public linkListObj {
 
             msgTypes getType(void);
             uint32_t getPGN(void);
+            
             int      getNumBytes(void);
    virtual  void     decodeMessage(void)=0;
             void     showDataBytes(void);
+            void     setSendInterval(float inMs);
+            float    getSendInterval(void);
    virtual  void     sendMessage(void)=0;
+   virtual  void     autoSend(void);
             
             byte*    dataBytes;
             int      numBytes;
             msgTypes msgType;
             uint32_t msgPGN;
+            byte     instance;
+            timeObj  intervaTimer;
 };
 
 
@@ -173,8 +182,6 @@ class fluidLevelObj  : public CANMsgObj {
    protected:
    virtual  void     decodeMessage(void);
    
-             
-            byte     instance;
             tankType fluidType;
             float    level;
             float    capacity;

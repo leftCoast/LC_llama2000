@@ -3,7 +3,7 @@
 
 
 
-int swap16(byte hiByte,int lowByte) {
+int pack16(byte hiByte,int lowByte) {
   
    struct int16 {
       byte lowByte;
@@ -19,7 +19,7 @@ int swap16(byte hiByte,int lowByte) {
    return(value);
 }
 
-int swap32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
+int pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
   
    struct int32 {
       byte byte0;
@@ -60,8 +60,7 @@ uint32_t makeAddress (uint32_t pgn, uint8_t priority, uint8_t source) {
 
 
 llama_NMEA200::llama_NMEA200(int inResetPin,int inIntPin)
-  : linkList(),
-  idler() {
+  : linkList(), idler() {
 
   resetPin = inResetPin;
   intPin   = inIntPin;
@@ -174,7 +173,7 @@ void llama_NMEA200::readAddress (uint32_t can_id, msg_t* msg) {
 
 
 CANMsgObj::CANMsgObj(int inNumBytes)
-   : linkListObj() {
+   : linkListObj(), idler() {
 
    msgType = noType;
    msgPGN  = 0;
@@ -183,8 +182,9 @@ CANMsgObj::CANMsgObj(int inNumBytes)
    Serial.print("Num data bytes : ");
    Serial.println(inNumBytes);
    if (resizeBuff(inNumBytes,&dataBytes)) {
-   numBytes = inNumBytes;
-  }
+      numBytes = inNumBytes;
+   }
+   intervaTimer.reset();   // Default to off.
 }
 
 
@@ -207,6 +207,28 @@ void CANMsgObj::showDataBytes(void) {
 }
  
  
+void CANMsgObj::setSendInterval(float inMs) {
+
+   if (inMs>0) {
+      intervaTimer.setTime(inMs);
+      hookup();
+   } else {
+      intervaTimer.reset();
+   }
+}
+ 
+
+float CANMsgObj::getSendInterval(void) {  intervaTimer.getTime(); }
+ 
+ 
+void  CANMsgObj::idle(void) {
+
+   if (intervaTimer.ding()) {
+      sendMessage();
+      intervaTimer.stepTime();
+   }
+}
+ 
  
 // ************* waterSpeedObj *************
 
@@ -228,7 +250,7 @@ void waterSpeedObj::decodeMessage(void) {
 
   unsigned int rawSpeed;
   
-  rawSpeed = (unsigned int) swap16(dataBytes[2],dataBytes[1]);
+  rawSpeed = (unsigned int) pack16(dataBytes[2],dataBytes[1]);
   knots = speedMap.map(rawSpeed);
 }
 
@@ -259,7 +281,7 @@ void waterDepthObj::decodeMessage(void) {
 
   unsigned int rawDepth;
   
-  rawDepth = (unsigned int) swap32(dataBytes[4],dataBytes[3],dataBytes[2],dataBytes[1]);
+  rawDepth = (unsigned int) pack32(dataBytes[4],dataBytes[3],dataBytes[2],dataBytes[1]);
   rawDepth = rawDepth / 100.0;     // Give meters.
   feet = rawDepth * 3.28084;     // Give feet
 }
@@ -291,7 +313,7 @@ void waterTempObj::decodeMessage(void) {
 
    unsigned int rawTemp;
 
-   rawTemp  = (unsigned int) (unsigned int) swap16(dataBytes[4],dataBytes[3]);
+   rawTemp  = (unsigned int) (unsigned int) pack16(dataBytes[4],dataBytes[3]);
    degF  = rawTemp / 100.0;         // Give kelvan.
    degF  = (degF * 1.8) - 459.67;   // Give degF.
 }
