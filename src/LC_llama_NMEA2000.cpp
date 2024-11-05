@@ -1,4 +1,4 @@
-#include <LC_llama_NMEA200.h>
+#include <LC_llama_NMEA2000.h>
 #include <resizeBuff.h>
 
 
@@ -40,14 +40,14 @@ int pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
 }
 
 
-CANMsgObj* createMsgObj(msgTypes inType) {
+CANMsgObj* createMsgObj(ECU* inECU,msgTypes inType) {
 
    switch(inType) {
       case noType       : return NULL;
-      case waterSpeed   : return (CANMsgObj*) new waterSpeedObj;
-      case waterDepth   : return (CANMsgObj*) new waterDepthObj;
-      case waterTemp    : return (CANMsgObj*) new waterTempObj;
-      case fluidLevel    : return (CANMsgObj*) new fluidLevelObj;
+      case waterSpeed   : return (CANMsgObj*) new waterSpeedObj(inECU);
+      case waterDepth   : return (CANMsgObj*) new waterDepthObj(inECU);
+      case waterTemp    : return (CANMsgObj*) new waterTempObj(inECU);
+      case fluidLevel    : return (CANMsgObj*) new fluidLevelObj(inECU);
    }
    return NULL;
 }
@@ -56,21 +56,21 @@ uint32_t makeAddress (uint32_t pgn, uint8_t priority, uint8_t source) {
   return ((pgn << 8) | priority << 26) | source;
 }
 
-// ************ llama_NMEA200 ************
+// ************ llama_NMEA2000 ************
 
 
-llama_NMEA200::llama_NMEA200(int inResetPin,int inIntPin)
-  : linkList(), idler() {
+llama_NMEA2000::llama_NMEA2000(byte inECUInst,int inResetPin,int inIntPin)
+  : ECU(inECUInst) {
 
   resetPin = inResetPin;
   intPin   = inIntPin;
 }
 
 
-llama_NMEA200::~llama_NMEA200(void) {  }
+llama_NMEA2000::~llama_NMEA2000(void) {  }
 
 
-bool llama_NMEA200::begin(int inCSPin) {
+bool llama_NMEA2000::begin(int inCSPin) {
 
   hookup();
   pinMode(resetPin, OUTPUT);
@@ -82,13 +82,13 @@ bool llama_NMEA200::begin(int inCSPin) {
 }
 
 
-CANMsgObj* llama_NMEA200::getMsgObj(uint32_t inPGN) {
+CANMsgObj* llama_NMEA2000::getMsgObj(uint32_t inPGN,int inInstance) {
 
   CANMsgObj* trace;
   
   trace = (CANMsgObj*)getFirst();
   while(trace) {
-    if (trace->getPGN()==inPGN) {
+    if (trace->getPGN()==inPGN && trace->getFunctInst()==inInstance) {
       return trace;
     }
     trace = (CANMsgObj*)trace->getNext();
@@ -97,13 +97,13 @@ CANMsgObj* llama_NMEA200::getMsgObj(uint32_t inPGN) {
 }
 
 
-CANMsgObj* llama_NMEA200::getMsgObj(msgTypes inType) {
+CANMsgObj* llama_NMEA2000::getMsgObj(msgTypes inType,int inInstance) {
 
   CANMsgObj* trace;
   
   trace = (CANMsgObj*)getFirst();
   while(trace) {
-    if (trace->getType()==inType) {
+    if (trace->getType()==inType && trace->getFunctInst()==inInstance) {
       return trace;
     }
     trace = (CANMsgObj*)trace->getNext();
@@ -112,15 +112,16 @@ CANMsgObj* llama_NMEA200::getMsgObj(msgTypes inType) {
 }
 
 
-bool llama_NMEA200::addMsgObj(msgTypes inType) {
+bool llama_NMEA2000::addMsgObj(msgTypes inType,int inInstance) {
 
    CANMsgObj* newMsgObj;
   
-   if (!getMsgObj(inType)) {
-      newMsgObj = createMsgObj(inType);
+   if (!getMsgObj(inType,inInstance)) {
+      newMsgObj = createMsgObj(this,inType);
       if (!newMsgObj) {
           return false;
       } else {
+      	newMsgObj->setFunctInst(inInstance);
          addToTop(newMsgObj);
       }
    }
@@ -128,34 +129,37 @@ bool llama_NMEA200::addMsgObj(msgTypes inType) {
 }
 
 
-void llama_NMEA200::idle(void) {
+void llama_NMEA2000::idle(void) {
 
    int         packetSize;
-   uint32_t    theID;
+	uint32_t    theID;
    msg_t       msg;
-   CANMsgObj* decodeObj;
+   CANMsgObj*	messageObj;
    int         i;
-   int          numBytes;
+   int			numBytes;
 
-   packetSize = CAN.parsePacket();
-   if (packetSize) {
-      theID = CAN.packetId();
-      readAddress (theID, &msg);
-      decodeObj = (CANMsgObj*)getMsgObj(msg.pgn);
-      if (decodeObj) {
-         numBytes = decodeObj->getNumBytes();
-         i = 0;
-         while (CAN.available()&&i<numBytes) {
-            decodeObj->dataBytes[i] = CAN.read();
-            i++;
-         }
-         decodeObj->decodeMessage();
+	ECU::idle();													// Let all the CANMsgObj(s) have time to do things.
+   packetSize = CAN.parsePacket();							// Check to see if a packet came though.
+   if (packetSize) {												// If we got a packet..
+      theID = CAN.packetId();									// Read it's ID (PGN + ADDRESS).
+      readAddress (theID, &msg);								// Decode the ID.
+      messageObj = (CANMsgObj*)getMsgObj(msg.pgn);		// See we can find a messageObj (CA) that will handle this..
+      if (messageObj) {											// If we do have a messageObj to handle it..
+         numBytes = messageObj->getNumBytes();			// Read the size of it's storage buffer.
+         i = 0;													// Starting at zero..
+         while (CAN.available()&&i<numBytes) {			// While we have a byte to read and a place to put it..
+            messageObj->dataBytes[i] = CAN.read();		// Read and store the byte into the messageObj.
+            i++;													// Bump of the storage index.
+         }															//
+         messageObj->decodeMessage();						// All stored, let the messageObj deal with it.
       }
    }
 }
 
 
-void llama_NMEA200::readAddress (uint32_t can_id, msg_t* msg) {
+
+// Decoding the 39 bit CAN header.
+void llama_NMEA2000::readAddress (uint32_t can_id, msg_t* msg) {
   
   uint32_t buffer = can_id;
   
@@ -172,29 +176,37 @@ void llama_NMEA200::readAddress (uint32_t can_id, msg_t* msg) {
 // ************* CANMsgObj *************
 
 
-CANMsgObj::CANMsgObj(int inNumBytes)
-   : linkListObj(), idler() {
+CANMsgObj::CANMsgObj(ECU* inECU)
+   : CA(inECU) {
 
-   msgType = noType;
-   msgPGN  = 0;
-   numBytes = 0;
-   dataBytes = NULL;
-   Serial.print("Num data bytes : ");
-   Serial.println(inNumBytes);
-   if (resizeBuff(inNumBytes,&dataBytes)) {
-      numBytes = inNumBytes;
-   }
-   intervaTimer.reset();   // Default to off.
+   msgType		= noType;				// No idea what type we'll be.
+   msgPGN		= 0;						// Goes along with that.
+   dataBytes	= NULL;					// So we can use resizeBuff().
+   setNumBytes(DEF_NUM_DATA_BYTES);	// Set the default size.
+   intervaTimer.reset();   			// Default to off.
 }
 
 
 CANMsgObj::~CANMsgObj(void) { resizeBuff(0,&dataBytes); }
 
+
 msgTypes CANMsgObj::getType(void) { return msgType; }
+
 
 uint32_t CANMsgObj::getPGN(void) { return msgPGN; }
 
+
 int CANMsgObj::getNumBytes(void) { return numBytes; }
+
+
+void CANMsgObj::setNumBytes(int inNumBytes) {
+
+	if (resizeBuff(inNumBytes,&dataBytes)) {
+      numBytes = inNumBytes;
+   } else {
+   	numBytes = 0;
+   }
+}
 
 
 void CANMsgObj::showDataBytes(void) {
@@ -211,17 +223,16 @@ void CANMsgObj::setSendInterval(float inMs) {
 
    if (inMs>0) {
       intervaTimer.setTime(inMs);
-      hookup();
    } else {
       intervaTimer.reset();
    }
 }
  
 
-float CANMsgObj::getSendInterval(void) {  intervaTimer.getTime(); }
+float CANMsgObj::getSendInterval(void) {  return intervaTimer.getTime(); }
  
  
-void  CANMsgObj::idle(void) {
+void  CANMsgObj::idleTime(void) {
 
    if (intervaTimer.ding()) {
       sendMessage();
@@ -229,12 +240,13 @@ void  CANMsgObj::idle(void) {
    }
 }
  
- 
+
+
 // ************* waterSpeedObj *************
 
 
-waterSpeedObj::waterSpeedObj(void)
-   : CANMsgObj() {
+waterSpeedObj::waterSpeedObj(ECU* inECU)
+   : CANMsgObj(inECU) {
 
   msgType = waterSpeed;
   msgPGN  = 0x1F503;
@@ -265,8 +277,8 @@ void waterSpeedObj::sendMessage(void) { }
 // ************* waterDepthObj *************
 
 
-waterDepthObj::waterDepthObj(void)
-   : CANMsgObj() {
+waterDepthObj::waterDepthObj(ECU* inECU)
+   : CANMsgObj(inECU) {
 
   msgType = waterDepth;
   msgPGN  = 0x1F50B;
@@ -297,8 +309,8 @@ void waterDepthObj::sendMessage(void) { }
 // ************* waterTempObj *************
 
 
-waterTempObj::waterTempObj(void)
-   : CANMsgObj() {
+waterTempObj::waterTempObj(ECU* inECU)
+   : CANMsgObj(inECU) {
 
    msgType  = waterTemp;
    msgPGN   = 0x1FD08;
@@ -325,29 +337,22 @@ float waterTempObj::getTemp(void) { return degF; }
 void waterTempObj::sendMessage(void) { }
 
 
+
 // ************* fluidLevelObj *************
 
 
- fluidLevelObj::fluidLevelObj(void) 
-   : CANMsgObj() {
+ fluidLevelObj::fluidLevelObj(ECU* inECU) 
+   : CANMsgObj(inECU) {
    
-   msgType  = fluidLevel;
-   msgPGN   = 0x1F211;
-   
-   instance    = 0;
-   fluidType   = fuel;  // This is 0.
+   msgType		= fluidLevel;
+   msgPGN		= 0x1F211;
+	fluidType	= fuel;  // This is 0.
    level       = 0;
-   capacity    = 0;
-   //periodTimer.setTime(2500);
+   setSendInterval(2500);	// Only set this if we send the stuff.
 }
  
 
 fluidLevelObj::~fluidLevelObj(void) {  }
-
-
-byte  fluidLevelObj::getInstance(void) { return instance; }
-
-void  fluidLevelObj::setInstance(byte inInstance) { instance = inInstance; }
 
 tankType fluidLevelObj::getTankType() { return fluidType; }
 
@@ -361,9 +366,7 @@ float fluidLevelObj::getCapacity(void) { return capacity; }
 
 void fluidLevelObj::setCapacity(float inCapacity) { capacity = inCapacity; }
           
-
 void fluidLevelObj::decodeMessage(void) {
-
 
 }
 
@@ -376,7 +379,7 @@ void fluidLevelObj::sendMessage(void) {
    
    address = makeAddress(msgPGN,6,0);
    
-   dataBytes[0] = instance & 0b00001111;
+   dataBytes[0] = getFunctInst() & 0b00001111;
    dataBytes[0] = dataBytes[0]<<4;
    dataBytes[0] = dataBytes[0] | ((byte)fluidType & 0b00001111);
    

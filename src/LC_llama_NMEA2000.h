@@ -6,6 +6,7 @@
 #include <mapper.h>
 #include <timeObj.h>
 #include <CAN.h>
+#include <SAE_J1939.h>
 
 
 #define DEF_2515_RST_PIN   8
@@ -13,6 +14,7 @@
 #define DEF_NUM_DATA_BYTES 8
 
 
+// Basically what are called parameter group numbers. Or PGN(s)
 enum msgTypes {
   noType,
   waterSpeed,  // 0x1F503
@@ -20,6 +22,7 @@ enum msgTypes {
   waterTemp,   // 0x1FD08
   fluidLevel   // 0x1F211
 };
+
 
 enum tankType {
    fuel,
@@ -30,31 +33,31 @@ enum tankType {
    blackWater
 };
 
-struct msg_t {
-  uint32_t  pgn;
-  uint8_t   sa;
-  uint8_t   ps;
-  uint8_t   dp;
-  uint8_t   priority;
-};
 
+// Decoding the 39 bit CAN header.
+struct msg_t {
+  uint32_t  pgn;			// Type of data (Parameter group number)
+  uint8_t   sa;			// Source address. -NMEA 2000 address-
+  uint8_t   ps;			// Part of PGN
+  uint8_t   dp;			// Part of PGN
+  uint8_t   priority;	// CAN priority bits.
+};
 
 
 class CANMsgObj;
 
 
-// ************ llama_NMEA200 ************
+// ************ llama_NMEA2000 ************
 
 
-class llama_NMEA200 :   public linkList,
-                        public idler {
+class llama_NMEA2000 :   public ECU {
    public:
-            llama_NMEA200(int inResetPin=DEF_2515_RST_PIN,int inIntPin=DEF_2515_INT_PIN);
-            ~llama_NMEA200(void);
+            llama_NMEA2000(byte inECUInst=0,int inResetPin=DEF_2515_RST_PIN,int inIntPin=DEF_2515_INT_PIN);
+            ~llama_NMEA2000(void);
 
             bool        begin(int inCSPin);
             bool        addMsgObj(msgTypes inType,int inInstance=0);
-            CANMsgObj*  getMsgObj(uint32_t inType,int inInstance=0);
+            CANMsgObj*  getMsgObj(uint32_t inPGN,int inInstance=0);
             CANMsgObj*  getMsgObj(msgTypes inType,int inInstance=0);
    virtual  void        idle(void); // Watches for new data.
     
@@ -71,28 +74,29 @@ class llama_NMEA200 :   public linkList,
 // ************* CANMsgObj *************
 
 
-class CANMsgObj : public linkListObj {     Sadly this can NOT inherit from idler. Deal with it.
+class CANMsgObj : public CA {
 
    public:
-            CANMsgObj(int inNumBytes=DEF_NUM_DATA_BYTES);
+            CANMsgObj(ECU* inECU);
             ~CANMsgObj(void);
 
             msgTypes getType(void);
             uint32_t getPGN(void);
             
             int      getNumBytes(void);
+            void		setNumBytes(int inNumBytes);
    virtual  void     decodeMessage(void)=0;
             void     showDataBytes(void);
             void     setSendInterval(float inMs);
             float    getSendInterval(void);
    virtual  void     sendMessage(void)=0;
-   virtual  void     autoSend(void);
+   virtual	void		idleTime(void);		// Same as idle, but called by the ECU.
             
             byte*    dataBytes;
             int      numBytes;
             msgTypes msgType;
             uint32_t msgPGN;
-            byte     instance;
+            //byte     instance;
             timeObj  intervaTimer;
 };
 
@@ -104,7 +108,7 @@ class CANMsgObj : public linkListObj {     Sadly this can NOT inherit from idler
 class waterSpeedObj  : public CANMsgObj {
 
    public:
-          waterSpeedObj(void);
+          waterSpeedObj(ECU* inECU);
           ~waterSpeedObj(void);
           
             float getSpeed(void);
@@ -125,7 +129,7 @@ class waterSpeedObj  : public CANMsgObj {
 class waterDepthObj  : public CANMsgObj {
 
    public:
-          waterDepthObj(void);
+          waterDepthObj(ECU* inECU);
           ~waterDepthObj(void);
           
             float getDepth(void);
@@ -146,7 +150,7 @@ class waterDepthObj  : public CANMsgObj {
 class waterTempObj  : public CANMsgObj {
 
    public:
-            waterTempObj(void);
+            waterTempObj(ECU* inECU);
             ~waterTempObj(void);
           
             float getTemp(void);
@@ -166,19 +170,17 @@ class waterTempObj  : public CANMsgObj {
 class fluidLevelObj  : public CANMsgObj {
 
    public:
-            fluidLevelObj(void);
+            fluidLevelObj(ECU* inECU);
             ~fluidLevelObj(void);
           
-            byte     getInstance(void);
-            void     setInstance(byte inInstance);
             tankType getTankType(void);
             void     setTankType(tankType inType);
             float    getLevel(void);
             void     setLevel(float inLevel);
             float    getCapacity(void);
             void     setCapacity(float inCapacity);
-            virtual  void     sendMessage(void);
-            
+   virtual  void     sendMessage(void);
+          
    protected:
    virtual  void     decodeMessage(void);
    
@@ -186,8 +188,6 @@ class fluidLevelObj  : public CANMsgObj {
             float    level;
             float    capacity;
             int      tankID;
-            //float    autoPeriod;
-            //mapper   periodTimer;
 };
 
 

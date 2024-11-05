@@ -4,10 +4,7 @@
 byte nameBuff[8];		// Global name buffer for when people want to grab the 8 bytes from the CAName class.
 
 
-// Electronic control unit.
-class ECU :	public linkList,
-				public idler {							
-
+// Electronic control unit.						
 ECU::ECU(byte inECUInst)
 	: linkList(), idler() {
 	
@@ -20,18 +17,75 @@ ECU::~ECU(void) {  }
 		
 byte ECU::getECUInst(void) { return ECUInst; }
 
+void ECU::setECUInst(byte inInst) { ECUInst = inInst; }
 
-void byte ECU::idle(void) {
+
+void ECU::idle(void) {
 
 	CA* trace;
 	
 	trace = (CA*)getFirst();
 	while(trace) {
-		trace.idleTime();
-		trace = (CA*)getFirst();
+		trace->idleTime();
+		trace = (CA*)trace->getNext();
 	}
 }
 
+
+
+//				----- 29 bit CAN header pack & unpack -----
+
+
+extCANHeader::extCANHeader(void) {  }
+
+
+extCANHeader::~extCANHeader(void) {  }
+	
+	
+void		setHeader(uint32_t inHeader) {
+
+
+}
+
+
+uint32_t	getHeader(void) {
+
+
+}
+
+
+void extCANHeader::setPriority(byte inPriority) { priority = inPriority; }
+
+byte extCANHeader::getPriority(void) { return priority; }
+
+void extCANHeader::setDataPage(bool inDataPage) { dataPage = inDataPage; }
+
+void extCANHeader::getDataPage(void) { return dataPage; }
+
+void extCANHeader::setPUDFormat(byte inFormat) { PDUFormat = inFormat; }
+
+byte extCANHeader::getPUDFormat(void) { return PDUFormat; }
+
+void extCANHeader::setPUDSpecific(byte inSpecific) { PDUSpecific = inSpecific; }
+
+byte extCANHeader::getPUDSpecific(void) { return PDUSpecific; }
+
+void extCANHeader::setSRRBit(bool inSRR) { subRemoteReq = inSRR; }
+
+bool extCANHeader::getSRRBit(void) { return subRemoteReq; }
+
+void extCANHeader::setExtBit(bool inExt) { IDExtBit = inExt; }
+
+bool extCANHeader::getExtBit(void) { return IDExtBit; }
+
+void extCANHeader::setSourceAddr(byte inSourceAddr) { sourceAddr = inSourceAddr; }
+
+byte extCANHeader::getSourceAddr(void) { return sourceAddr; }
+
+void extCANHeader::setDataLen(byte inDataLen) { dataLen = inDataLen; }
+
+byte extCANHeader::getDataLen(void) { return dataLen; }
+		
 
 /*
 // Addressing categories for CA's. Choose one.
@@ -93,7 +147,7 @@ void CAName::setIndGroup(byte indGroup) {
 // 4 bit - System instance, like engine1 or engine2.
 byte CAName::getSystemInst(void) { return name[7] & 0xF; }
 
-void setSystemInst(byte sysInst) {
+void CAName::setSystemInst(byte sysInst) {
 	
 	name[7] &= ~(0xF);							//Clear bits
 	name[7] = name[7] | (sysInst & 0xF);
@@ -104,7 +158,7 @@ void setSystemInst(byte sysInst) {
 // 7 bit - Assigned by committee.
 byte CAName::getVehSys(void) { return (name[6] >> 1); }
 
-void setVehSys(byte vehSys) {
+void CAName::setVehSys(byte vehSys) {
 
 	name[6] = 0;								//Clear bits
 	name[6] = name[6] | (vehSys << 1);
@@ -123,7 +177,7 @@ void CAName::setFunction(byte funct) { name[5] = funct; }
 // 5 bit - Instance of this function. (Fuel level?)
 byte CAName::getFunctInst(void) { return name[4] >> 3; }
 
-void setFunctInst(byte functInst) {
+void CAName::setFunctInst(byte functInst) {
 
 	name[4] &= ~(0x1F << 3);								//Clear bits
 	name[4] = name[4] | ((functInst & 0x1F) << 3);
@@ -133,7 +187,7 @@ void setFunctInst(byte functInst) {
 // 3 bit - What processor instance are we?
 byte CAName::getECUInst(void) { return name[4] & 0x7; }
 
-void setECUInst(byte inst) {
+void CAName::setECUInst(byte inst) {
 
 	name[4] &= ~(0x7);
 	name[4] = name[4] | (inst & 0x7);
@@ -187,18 +241,13 @@ void CAName::setName(byte* namePtr) {
 //  -----------  CA class  -----------
 
 
-CA::CA(ECU* inECU,CACat inAddrCat,byte inDefAddress)
-	: linkList(),
-	CAName {
+CA::CA(ECU* inECU)
+	: linkListObj(), CAName() {
 	
-	ourECU		= inECU;
-	ourAddrCat	= inAddrCat;
-	defAddress	= inDefAddress;
-	if (ourAddrCat==noAddress) {
-		address = NULL_ADDR;
-	} else {
-		address		= defAddress;
-	}
+	ourECU		= inECU;			// Pointer back to our "boss". 
+	ourAddrCat	= nonConfig;	// These three are just defaults.
+	defAddress	= 0;				// Whom ever we end up "in", will set these up
+	address = NULL_ADDR;			// to fit their function.
 }
 
 
@@ -216,6 +265,7 @@ void CA::setAddrCat(adderCat inAddrCat) { ourAddrCat = inAddrCat; }
 void CA::setNonConfigAddr(byte inAddr) {
 
 	address = inAddr;
+	
 }
 
 	
@@ -227,20 +277,17 @@ byte CA::getAddr(void) { return address; }
 
 
 
-void CA::setAddr(byte inAddr) {
+void CA::setAddr(byte inAddr) { address = inAddr; }
 	
-	
-	
-}
 
 
-byte CA::getDefAddr(void) {
+byte CA::getDefAddr(void) { return defAddress; }
 
-}
 
 
 void CA::setDefAddr(byte inAddr) {
 
+	defAddress = inAddr;
 }
 
 // arbitraryConfig
