@@ -52,10 +52,6 @@ CANMsgObj* createMsgObj(ECU* inECU,msgTypes inType) {
    return NULL;
 }
 
-uint32_t makeAddress (uint32_t pgn, uint8_t priority, uint8_t source) {
-  return ((pgn << 8) | priority << 26) | source;
-}
-
 // ************ llama_NMEA2000 ************
 
 
@@ -87,6 +83,7 @@ CANMsgObj* llama_NMEA2000::getMsgObj(uint32_t inPGN,int inInstance) {
   CANMsgObj* trace;
   
   trace = (CANMsgObj*)getFirst();
+  Serial.print("Looking for : ");Serial.print(inPGN);Serial.print("  instance ");Serial.println(inInstance);
   while(trace) {
     if (trace->getPGN()==inPGN && trace->getFunctInst()==inInstance) {
       return trace;
@@ -129,6 +126,26 @@ bool llama_NMEA2000::addMsgObj(msgTypes inType,int inInstance) {
 }
 
 
+void llama_NMEA2000::handleMsg(uint32_t PGN) {
+
+	CANMsgObj*	messageObj;
+	int         i;
+   int			numBytes;
+   
+	messageObj = (CANMsgObj*)getMsgObj(PGN);			// See we can find a messageObj (CA) that will handle this..
+	if (messageObj) {											// If we do have a messageObj to handle it..
+		numBytes = messageObj->getNumBytes();			// Read the size of it's storage buffer.
+		i = 0;													// Starting at zero..
+		while (CAN.available()&&i<numBytes) {			// While we have a byte to read and a place to put it..
+			messageObj->dataBytes[i] = CAN.read();		// Read and store the byte into the messageObj.
+			i++;													// Bump of the storage index.
+		}															//
+		messageObj->decodeMessage();						// All stored, let the messageObj deal with it.
+	}
+}
+
+
+/*
 void llama_NMEA2000::idle(void) {
 
    int         packetSize;
@@ -155,9 +172,9 @@ void llama_NMEA2000::idle(void) {
       }
    }
 }
+*/
 
-
-
+/*
 // Decoding the 39 bit CAN header.
 void llama_NMEA2000::readAddress (uint32_t can_id, msg_t* msg) {
   
@@ -170,7 +187,7 @@ void llama_NMEA2000::readAddress (uint32_t can_id, msg_t* msg) {
   msg->dp = (buffer & 0xFF00) >> 8;
   msg->priority = (buffer & 0x1C0000) >> 18;
 }
-
+*/
 
 
 // ************* CANMsgObj *************
@@ -377,7 +394,7 @@ void fluidLevelObj::sendMessage(void) {
    int32_t  tempLong;
    uint32_t address;
    
-   address = makeAddress(msgPGN,6,0);
+   address = ourECU->makeAddress(msgPGN,6,0);
    
    dataBytes[0] = getFunctInst() & 0b00001111;
    dataBytes[0] = dataBytes[0]<<4;

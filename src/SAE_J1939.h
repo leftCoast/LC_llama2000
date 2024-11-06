@@ -3,7 +3,7 @@
 
 #include <lists.h>
 #include <idlers.h>
-
+#include <CAN.h>				// Need to objectify this to a base class. Then any chip should work.
 
 // CAN Header. This is all built on CAN Bus. Each message has a 39 bit header. Followed by 0..8 bytes data.
 // PGN - Parameter Group Number. Basically what is this message about.
@@ -15,8 +15,17 @@
 #define ADDR_CLAIMED	60928		// Claimed PGN. "Hey EVERYONE this is my name and address." Or can't claim one.
 
 
-
 //				----- ECU Electronic control unit. -----
+
+
+// Decoding the 39 bit CAN header.
+struct msg_t {
+  uint32_t  pgn;			// Type of data (Parameter group number)
+  uint8_t   sa;			// Source address. -NMEA 2000 address-
+  uint8_t   ps;			// Part of PGN
+  uint8_t   dp;			// Part of PGN
+  uint8_t   priority;	// CAN priority bits.
+};
 
 
 class ECU :	public linkList,
@@ -26,10 +35,13 @@ class ECU :	public linkList,
 				ECU(byte inECUInst=0);
 	virtual	~ECU(void);
 		
-				byte	getECUInst(void);
-				void	setECUInst(byte inInst);
-	virtual	void idle(void);	
-	
+				byte		getECUInst(void);
+				void		setECUInst(byte inInst);
+				void     readAddress(uint32_t can_id, msg_t * msg);
+				uint32_t	makeAddress(uint32_t PGN, uint8_t priority, uint8_t source);
+	virtual  void		handleMsg(uint32_t PGN) = 0;
+	virtual	void		idle(void);	
+				
 	protected:
 		byte	ECUInst;
 };
@@ -49,7 +61,7 @@ class extCANHeader {
 	void		setPriority(byte inPriority);
 	byte		getPriority(void);
 	void		setDataPage(bool inDataPage);
-	void		getDataPage(void);
+	bool		getDataPage(void);
 	void		setPUDFormat(byte inFormat);
 	byte		getPUDFormat(void);
 	void		setPUDSpecific(byte inSpecific);

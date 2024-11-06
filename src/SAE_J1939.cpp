@@ -17,13 +17,45 @@ ECU::~ECU(void) {  }
 		
 byte ECU::getECUInst(void) { return ECUInst; }
 
+
 void ECU::setECUInst(byte inInst) { ECUInst = inInst; }
 
 
+// Decoding the 39 bit CAN header.
+void ECU::readAddress (uint32_t can_id, msg_t* msg) {
+  
+  uint32_t buffer = can_id;
+  
+  msg->sa = buffer & 0xFF;
+  buffer = buffer >> 8;
+  msg->pgn = buffer & 0x3FFFF;
+  msg->ps = buffer & 0xFF;
+  msg->dp = (buffer & 0xFF00) >> 8;
+  msg->priority = (buffer & 0x1C0000) >> 18;
+}
+
+
+uint32_t ECU::makeAddress(uint32_t PGN, uint8_t priority, uint8_t source) {
+
+	return ((PGN << 8) | priority << 26) | source;
+}
+ 
+
+// First thing is to check for and handle incoming messages.
+// Next is to see if any CA's need to output messages of their own.
 void ECU::idle(void) {
 
-	CA* trace;
+	int         packetSize;
+	uint32_t    theID;
+   msg_t       msg;
+	CA*			trace;
 	
+   packetSize = CAN.parsePacket();							// Check to see if a packet came though.
+   if (packetSize) {												// If we got a packet..
+      theID = CAN.packetId();									// Read it's ID (PGN + ADDRESS).
+      readAddress (theID, &msg);								// Decode the ID.
+      handleMsg(msg.pgn);
+   }
 	trace = (CA*)getFirst();
 	while(trace) {
 		trace->idleTime();
@@ -42,15 +74,15 @@ extCANHeader::extCANHeader(void) {  }
 extCANHeader::~extCANHeader(void) {  }
 	
 	
-void		setHeader(uint32_t inHeader) {
+void  extCANHeader::setHeader(uint32_t inHeader) {
 
 
 }
 
 
-uint32_t	getHeader(void) {
+uint32_t  extCANHeader::getHeader(void) {
 
-
+	return 0;
 }
 
 
@@ -60,7 +92,7 @@ byte extCANHeader::getPriority(void) { return priority; }
 
 void extCANHeader::setDataPage(bool inDataPage) { dataPage = inDataPage; }
 
-void extCANHeader::getDataPage(void) { return dataPage; }
+bool extCANHeader::getDataPage(void) { return dataPage; }
 
 void extCANHeader::setPUDFormat(byte inFormat) { PDUFormat = inFormat; }
 

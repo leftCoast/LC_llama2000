@@ -33,7 +33,7 @@ enum tankType {
    blackWater
 };
 
-
+/*
 // Decoding the 39 bit CAN header.
 struct msg_t {
   uint32_t  pgn;			// Type of data (Parameter group number)
@@ -42,7 +42,7 @@ struct msg_t {
   uint8_t   dp;			// Part of PGN
   uint8_t   priority;	// CAN priority bits.
 };
-
+*/
 
 class CANMsgObj;
 
@@ -59,10 +59,10 @@ class llama_NMEA2000 :   public ECU {
             bool        addMsgObj(msgTypes inType,int inInstance=0);
             CANMsgObj*  getMsgObj(uint32_t inPGN,int inInstance=0);
             CANMsgObj*  getMsgObj(msgTypes inType,int inInstance=0);
-   virtual  void        idle(void); // Watches for new data.
+   virtual  void			handleMsg(uint32_t PGN);
     
    protected:
-            void        readAddress(uint32_t can_id, msg_t * msg);
+            //void        readAddress(uint32_t can_id, msg_t * msg);
     
             int   resetPin;
             int   intPin;
@@ -96,7 +96,6 @@ class CANMsgObj : public CA {
             int      numBytes;
             msgTypes msgType;
             uint32_t msgPGN;
-            //byte     instance;
             timeObj  intervaTimer;
 };
 
