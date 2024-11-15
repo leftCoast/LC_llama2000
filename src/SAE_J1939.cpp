@@ -63,62 +63,9 @@ void ECU::idle(void) {
 
 
 
-//				----- 29 bit CAN header pack & unpack -----
-
-
-extCANHeader::extCANHeader(void) {  }
-
-
-extCANHeader::~extCANHeader(void) {  }
-	
-	
-void  extCANHeader::setHeader(uint32_t inHeader) {
-
-
-}
-
-
-uint32_t  extCANHeader::getHeader(void) {
-
-	return 0;
-}
-
-
-void extCANHeader::setPriority(byte inPriority) { priority = inPriority; }
-
-byte extCANHeader::getPriority(void) { return priority; }
-
-void extCANHeader::setDataPage(bool inDataPage) { dataPage = inDataPage; }
-
-bool extCANHeader::getDataPage(void) { return dataPage; }
-
-void extCANHeader::setPUDFormat(byte inFormat) { PDUFormat = inFormat; }
-
-byte extCANHeader::getPUDFormat(void) { return PDUFormat; }
-
-void extCANHeader::setPUDSpecific(byte inSpecific) { PDUSpecific = inSpecific; }
-
-byte extCANHeader::getPUDSpecific(void) { return PDUSpecific; }
-
-void extCANHeader::setSRRBit(bool inSRR) { subRemoteReq = inSRR; }
-
-bool extCANHeader::getSRRBit(void) { return subRemoteReq; }
-
-void extCANHeader::setExtBit(bool inExt) { IDExtBit = inExt; }
-
-bool extCANHeader::getExtBit(void) { return IDExtBit; }
-
-void extCANHeader::setSourceAddr(byte inSourceAddr) { sourceAddr = inSourceAddr; }
-
-byte extCANHeader::getSourceAddr(void) { return sourceAddr; }
-
-void extCANHeader::setDataLen(byte inDataLen) { dataLen = inDataLen; }
-
-byte extCANHeader::getDataLen(void) { return dataLen; }
-		
 
 /*
-// Addressing categories for CA's. Choose one.
+ Addressing categories for CA's. Choose one.
 enum adderCat {
 
 	nonConfig,			// Address is hard coded.
@@ -129,9 +76,6 @@ enum adderCat {
 	noAddress			// We have no address, just a listener, or broadcaster.
 };
 */
-
-
-
 
 //  -----------  CAName class  -----------
 

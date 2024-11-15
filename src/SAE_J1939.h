@@ -4,10 +4,11 @@
 #include <lists.h>
 #include <idlers.h>
 #include <timeObj.h>
-#include <resizeBuff.h>
-#include <CAN.h>				// Need to objectify this to a base class. Then any chip should work.
+#include <resizeBuff.h>				// Need to objectify this to a base class. Then any chip should work.
 
-// CAN Header. This is all built on CAN Bus. Each message has a 39 bit header. Followed by 0..8 bytes data.
+// CAN Header. This is all built on CAN Bus. Each message has a 39 bit header. Pared down
+// to 29 bits of info. Followed by 0..8 bytes data.
+// 
 // PGN - Parameter Group Number. Basically what is this message about.
 
 
@@ -18,21 +19,12 @@
 
 #define DEF_NUM_DATA_BYTES 8
 
+
 //				----- ECU Electronic control unit. -----
 
-/*
-// Decoding the 29 bit CAN header.
-struct msgHeader {
-  uint32_t  PGN;			// Type of data (Parameter group number)
-  uint8_t   sourceAddr;	// Source address. -NMEA 2000 address-
-  uint8_t   ps;			// Part of PGN
-  uint8_t   dp;			// Part of PGN
-  uint8_t   priority;	// CAN priority bits.
-};
-*/
 
 
-// Decoding the 29 bit CAN header.
+// Decoding the 29 bit CAN/J1939 header.
 struct msgHeader {
 	uint32_t  PGN;				// Type of data (Parameter group number)
 	uint8_t   priority;		// CAN priority bits.
@@ -56,53 +48,12 @@ class ECU :	public linkList,
 				void     readHeader(uint32_t CANID, msgHeader* inHeader);
 				uint32_t	makeHeader(uint32_t PGN, uint8_t priority, uint8_t sourceAddr);
 	virtual  void		sendMessage(uint32_t PGN,byte priority,byte address,int numBytes,byte* data)=0;
-	virtual  void			handlePacket(void)=0;
+	virtual  void		handlePacket(void)=0;
 	virtual	void		idle(void);	
 				
 	protected:
 		byte	ECUInst;
 };
-
-
-
-//				----- 29 bit CAN header pack & unpack -----
-
-class extCANHeader {
-
-	public:
-					extCANHeader(void);
-	virtual		~extCANHeader(void);
-	
-	void		setHeader(uint32_t inHeader);
-	uint32_t	getHeader(void);
-	void		setPriority(byte inPriority);
-	byte		getPriority(void);
-	void		setDataPage(bool inDataPage);
-	bool		getDataPage(void);
-	void		setPUDFormat(byte inFormat);
-	byte		getPUDFormat(void);
-	void		setPUDSpecific(byte inSpecific);
-	byte		getPUDSpecific(void);
-	void		setSRRBit(bool inSRR);
-	bool		getSRRBit(void);
-	void		setExtBit(bool inExt);
-	bool		getExtBit(void);
-	void		setSourceAddr(byte inSourceAddr);
-	byte		getSourceAddr(void);
-	void		setDataLen(byte inDataLen);
-	byte		getDataLen(void);
-	
-	uint32_t	header;
-	byte		priority;
-	bool		dataPage;
-	byte		PDUFormat;
-	byte		PDUSpecific;
-	bool		subRemoteReq;
-	bool		IDExtBit;
-	byte		sourceAddr;
-	byte		dataLen;
-};
-
 
 
 //				----- Controller name -----

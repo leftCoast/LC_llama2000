@@ -48,6 +48,7 @@ class llama_NMEA2000 :   public ECU {
             CANMsgObj*  getMsgObj(uint32_t inPGN,int inInstance=0);
 	virtual  void			sendMessage(uint32_t PGN,byte priority,byte address,int numBytes,byte* data);
    virtual  void			handlePacket(void);
+   		  	void			showCANID(msgHeader CANID);
     
    protected:
     

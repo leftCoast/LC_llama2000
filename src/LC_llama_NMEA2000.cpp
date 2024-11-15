@@ -145,6 +145,8 @@ void llama_NMEA2000::handlePacket(void) {
    if (packetSize) {												// If we got a packet..
       theCANID = CAN.packetId();								// Read it's ID (PGN + ADDRESS).
       readHeader(theCANID, &header);						// Decode the ID.
+      Serial.println("-------------------");
+      showCANID(header);
 		messageObj = (CANMsgObj*)getMsgObj(header.PGN);	// See if we can find a messageObj (CA) that will handle this..
 		if (messageObj) {											// If we do have a messageObj to handle it..
 			numBytes = messageObj->getNumBytes();			// Read the size of it's storage buffer.
@@ -160,6 +162,17 @@ void llama_NMEA2000::handlePacket(void) {
 			messageObj->handleMsg();							// All stored, let the messageObj deal with it.
 		}
 	}
+}
+
+void llama_NMEA2000::showCANID(msgHeader CANID) {
+
+	Serial.print("PGN           : "); Serial.println(CANID.PGN,HEX);
+	Serial.print("Priority      : "); Serial.println(CANID.priority);
+	Serial.print("Reserve bit   : "); Serial.println(CANID.R);
+	Serial.print("Data page bit : "); Serial.println(CANID.DP);
+	Serial.print("PDU format    : "); Serial.println(CANID.PDUf);
+	Serial.print("PDU specific  : "); Serial.println(CANID.PDUs);
+	Serial.print("Source addr   : "); Serial.println(CANID.sourceAddr);
 }
 
 
@@ -195,7 +208,6 @@ void CANMsgObj::sendMessage(void) { Serial.println("WHAT?!"); }
 waterSpeedObj::waterSpeedObj(ECU* inECU)
    : CANMsgObj(inECU) {
 
-  //msgType = waterSpeed;
   ourPGN  = 0x1F503;
   knots   = 0;
   speedMap.setValues(0,1023,0,(1023*1.943844)*0.01);
@@ -227,7 +239,6 @@ void waterSpeedObj::sendMessage(void) { }
 waterDepthObj::waterDepthObj(ECU* inECU)
    : CANMsgObj(inECU) {
 
-  //msgType = waterDepth;
   ourPGN  = 0x1F50B;
   feet   = 0;
 }
@@ -259,7 +270,6 @@ void waterDepthObj::sendMessage(void) { }
 waterTempObj::waterTempObj(ECU* inECU)
    : CANMsgObj(inECU) {
 
-   //msgType  = waterTemp;
    ourPGN   = 0x1FD08;
    degF     = 0;
 }
@@ -294,6 +304,7 @@ void waterTempObj::sendMessage(void) { }
    ourPGN		= 0x1F211;
 	fluidType	= fuel;  // This is 0.
    level       = 0;
+   setSendInterval(2500);
 }
  
 
