@@ -40,17 +40,20 @@ int pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
 }
 
 
-CANMsgObj* createMsgObj(ECU* inECU,msgTypes inType) {
+CANMsgObj* createMsgObj(ECU* inECU,uint32_t PGN) {
 
-   switch(inType) {
-      case noType       : return NULL;
-      case waterSpeed   : return (CANMsgObj*) new waterSpeedObj(inECU);
-      case waterDepth   : return (CANMsgObj*) new waterDepthObj(inECU);
-      case waterTemp    : return (CANMsgObj*) new waterTempObj(inECU);
-      case fluidLevel    : return (CANMsgObj*) new fluidLevelObj(inECU);
+	switch(PGN) {
+      
+      case 0x1F503	: return (CANMsgObj*) new waterSpeedObj(inECU);
+      case 0x1F50B   : return (CANMsgObj*) new waterDepthObj(inECU);
+      case 0x1FD08	: return (CANMsgObj*) new waterTempObj(inECU);
+      case 0x1F211   : return (CANMsgObj*) new fluidLevelObj(inECU);
+      default			: return NULL;
    }
    return NULL;
 }
+
+
 
 // ************ llama_NMEA2000 ************
 
@@ -83,7 +86,6 @@ CANMsgObj* llama_NMEA2000::getMsgObj(uint32_t inPGN,int inInstance) {
   CANMsgObj* trace;
   
   trace = (CANMsgObj*)getFirst();
-  Serial.print("Looking for : ");Serial.print(inPGN);Serial.print("  instance ");Serial.println(inInstance);
   while(trace) {
     if (trace->getPGN()==inPGN && trace->getFunctInst()==inInstance) {
       return trace;
@@ -94,27 +96,12 @@ CANMsgObj* llama_NMEA2000::getMsgObj(uint32_t inPGN,int inInstance) {
 }
 
 
-CANMsgObj* llama_NMEA2000::getMsgObj(msgTypes inType,int inInstance) {
-
-  CANMsgObj* trace;
-  
-  trace = (CANMsgObj*)getFirst();
-  while(trace) {
-    if (trace->getType()==inType && trace->getFunctInst()==inInstance) {
-      return trace;
-    }
-    trace = (CANMsgObj*)trace->getNext();
-  }
-  return NULL;
-}
-
-
-bool llama_NMEA2000::addMsgObj(msgTypes inType,int inInstance) {
+bool llama_NMEA2000::addMsgObj(uint32_t inPGN,int inInstance) {
 
    CANMsgObj* newMsgObj;
   
-   if (!getMsgObj(inType,inInstance)) {
-      newMsgObj = createMsgObj(this,inType);
+   if (!getMsgObj(inPGN,inInstance)) {
+      newMsgObj = createMsgObj(this,inPGN);
       if (!newMsgObj) {
           return false;
       } else {
@@ -126,104 +113,68 @@ bool llama_NMEA2000::addMsgObj(msgTypes inType,int inInstance) {
 }
 
 
-void llama_NMEA2000::handleMsg(uint32_t PGN) {
+void llama_NMEA2000::sendMessage(uint32_t PGN,byte priority,byte address,int numBytes,byte* data) {
+	
+   uint32_t header;
+   
+   Serial.println("sendMessage()");
+   header = makeHeader(PGN,priority,address);
+   Serial.print("writing\t");Serial.print(PGN,HEX);Serial.print('\t');
+   Serial.print(priority); Serial.print('\t');
+   Serial.print(address); Serial.print('\t');
+   Serial.println(numBytes);
+   CAN.beginExtendedPacket(header);
+   for (int i=0;i<numBytes;i++) {
+      CAN.write(data[i]);
+   }
+   CAN.endPacket();
+}
+
+
+
+void llama_NMEA2000::handlePacket(void) {
 
 	CANMsgObj*	messageObj;
 	int         i;
    int			numBytes;
-   
-	messageObj = (CANMsgObj*)getMsgObj(PGN);			// See we can find a messageObj (CA) that will handle this..
-	if (messageObj) {											// If we do have a messageObj to handle it..
-		numBytes = messageObj->getNumBytes();			// Read the size of it's storage buffer.
-		i = 0;													// Starting at zero..
-		while (CAN.available()&&i<numBytes) {			// While we have a byte to read and a place to put it..
-			messageObj->dataBytes[i] = CAN.read();		// Read and store the byte into the messageObj.
-			i++;													// Bump of the storage index.
-		}															//
-		messageObj->decodeMessage();						// All stored, let the messageObj deal with it.
+   int         packetSize;
+	uint32_t    theCANID;
+   msgHeader	header;
+	
+	packetSize = CAN.parsePacket();							// Check to see if a packet came though.
+   if (packetSize) {												// If we got a packet..
+      theCANID = CAN.packetId();								// Read it's ID (PGN + ADDRESS).
+      readHeader(theCANID, &header);						// Decode the ID.
+		messageObj = (CANMsgObj*)getMsgObj(header.PGN);	// See if we can find a messageObj (CA) that will handle this..
+		if (messageObj) {											// If we do have a messageObj to handle it..
+			numBytes = messageObj->getNumBytes();			// Read the size of it's storage buffer.
+			i = 0;													// Starting at zero..
+			Serial.print(header.PGN,HEX);Serial.print('\t');
+			while (CAN.available()&&i<numBytes) {			// While we have a byte to read and a place to put it..
+				messageObj->dataBytes[i] = CAN.read();		// Read and store the byte into the messageObj.
+				Serial.print(messageObj->dataBytes[i]);
+				Serial.print('\t');
+				i++;													// Bump of the storage index.
+			}															//
+			Serial.println();
+			messageObj->handleMsg();							// All stored, let the messageObj deal with it.
+		}
 	}
 }
 
-
-/*
-void llama_NMEA2000::idle(void) {
-
-   int         packetSize;
-	uint32_t    theID;
-   msg_t       msg;
-   CANMsgObj*	messageObj;
-   int         i;
-   int			numBytes;
-
-	ECU::idle();													// Let all the CANMsgObj(s) have time to do things.
-   packetSize = CAN.parsePacket();							// Check to see if a packet came though.
-   if (packetSize) {												// If we got a packet..
-      theID = CAN.packetId();									// Read it's ID (PGN + ADDRESS).
-      readAddress (theID, &msg);								// Decode the ID.
-      messageObj = (CANMsgObj*)getMsgObj(msg.pgn);		// See we can find a messageObj (CA) that will handle this..
-      if (messageObj) {											// If we do have a messageObj to handle it..
-         numBytes = messageObj->getNumBytes();			// Read the size of it's storage buffer.
-         i = 0;													// Starting at zero..
-         while (CAN.available()&&i<numBytes) {			// While we have a byte to read and a place to put it..
-            messageObj->dataBytes[i] = CAN.read();		// Read and store the byte into the messageObj.
-            i++;													// Bump of the storage index.
-         }															//
-         messageObj->decodeMessage();						// All stored, let the messageObj deal with it.
-      }
-   }
-}
-*/
-
-/*
-// Decoding the 39 bit CAN header.
-void llama_NMEA2000::readAddress (uint32_t can_id, msg_t* msg) {
-  
-  uint32_t buffer = can_id;
-  
-  msg->sa = buffer & 0xFF;
-  buffer = buffer >> 8;
-  msg->pgn = buffer & 0x3FFFF;
-  msg->ps = buffer & 0xFF;
-  msg->dp = (buffer & 0xFF00) >> 8;
-  msg->priority = (buffer & 0x1C0000) >> 18;
-}
-*/
 
 
 // ************* CANMsgObj *************
 
 
 CANMsgObj::CANMsgObj(ECU* inECU)
-   : CA(inECU) {
-
-   msgType		= noType;				// No idea what type we'll be.
-   msgPGN		= 0;						// Goes along with that.
-   dataBytes	= NULL;					// So we can use resizeBuff().
-   setNumBytes(DEF_NUM_DATA_BYTES);	// Set the default size.
-   intervaTimer.reset();   			// Default to off.
-}
+   : CA(inECU) { }
 
 
 CANMsgObj::~CANMsgObj(void) { resizeBuff(0,&dataBytes); }
 
 
-msgTypes CANMsgObj::getType(void) { return msgType; }
-
-
-uint32_t CANMsgObj::getPGN(void) { return msgPGN; }
-
-
-int CANMsgObj::getNumBytes(void) { return numBytes; }
-
-
-void CANMsgObj::setNumBytes(int inNumBytes) {
-
-	if (resizeBuff(inNumBytes,&dataBytes)) {
-      numBytes = inNumBytes;
-   } else {
-   	numBytes = 0;
-   }
-}
+uint32_t CANMsgObj::getPGN(void) { return ourPGN; }
 
 
 void CANMsgObj::showDataBytes(void) {
@@ -235,28 +186,7 @@ void CANMsgObj::showDataBytes(void) {
    Serial.println();
 }
  
- 
-void CANMsgObj::setSendInterval(float inMs) {
-
-   if (inMs>0) {
-      intervaTimer.setTime(inMs);
-   } else {
-      intervaTimer.reset();
-   }
-}
- 
-
-float CANMsgObj::getSendInterval(void) {  return intervaTimer.getTime(); }
- 
- 
-void  CANMsgObj::idleTime(void) {
-
-   if (intervaTimer.ding()) {
-      sendMessage();
-      intervaTimer.stepTime();
-   }
-}
- 
+void CANMsgObj::sendMessage(void) { Serial.println("WHAT?!"); }
 
 
 // ************* waterSpeedObj *************
@@ -265,8 +195,8 @@ void  CANMsgObj::idleTime(void) {
 waterSpeedObj::waterSpeedObj(ECU* inECU)
    : CANMsgObj(inECU) {
 
-  msgType = waterSpeed;
-  msgPGN  = 0x1F503;
+  //msgType = waterSpeed;
+  ourPGN  = 0x1F503;
   knots   = 0;
   speedMap.setValues(0,1023,0,(1023*1.943844)*0.01);
 }
@@ -275,7 +205,7 @@ waterSpeedObj::waterSpeedObj(ECU* inECU)
 waterSpeedObj::~waterSpeedObj(void) {  }
 
 
-void waterSpeedObj::decodeMessage(void) {
+void waterSpeedObj::handleMsg(void) {
 
   unsigned int rawSpeed;
   
@@ -297,8 +227,8 @@ void waterSpeedObj::sendMessage(void) { }
 waterDepthObj::waterDepthObj(ECU* inECU)
    : CANMsgObj(inECU) {
 
-  msgType = waterDepth;
-  msgPGN  = 0x1F50B;
+  //msgType = waterDepth;
+  ourPGN  = 0x1F50B;
   feet   = 0;
 }
 
@@ -306,7 +236,7 @@ waterDepthObj::waterDepthObj(ECU* inECU)
 waterDepthObj::~waterDepthObj(void) {  }
 
 
-void waterDepthObj::decodeMessage(void) {
+void waterDepthObj::handleMsg(void) {
 
   unsigned int rawDepth;
   
@@ -329,8 +259,8 @@ void waterDepthObj::sendMessage(void) { }
 waterTempObj::waterTempObj(ECU* inECU)
    : CANMsgObj(inECU) {
 
-   msgType  = waterTemp;
-   msgPGN   = 0x1FD08;
+   //msgType  = waterTemp;
+   ourPGN   = 0x1FD08;
    degF     = 0;
 }
 
@@ -338,7 +268,7 @@ waterTempObj::waterTempObj(ECU* inECU)
 waterTempObj::~waterTempObj(void) {  }
 
 
-void waterTempObj::decodeMessage(void) {
+void waterTempObj::handleMsg(void) {
 
    unsigned int rawTemp;
 
@@ -361,11 +291,9 @@ void waterTempObj::sendMessage(void) { }
  fluidLevelObj::fluidLevelObj(ECU* inECU) 
    : CANMsgObj(inECU) {
    
-   msgType		= fluidLevel;
-   msgPGN		= 0x1F211;
+   ourPGN		= 0x1F211;
 	fluidType	= fuel;  // This is 0.
    level       = 0;
-   setSendInterval(2500);	// Only set this if we send the stuff.
 }
  
 
@@ -383,7 +311,7 @@ float fluidLevelObj::getCapacity(void) { return capacity; }
 
 void fluidLevelObj::setCapacity(float inCapacity) { capacity = inCapacity; }
           
-void fluidLevelObj::decodeMessage(void) {
+void fluidLevelObj::handleMsg(void) {
 
 }
 
@@ -392,10 +320,7 @@ void fluidLevelObj::sendMessage(void) {
    
    int16_t  tempInt;
    int32_t  tempLong;
-   uint32_t address;
-   
-   address = ourECU->makeAddress(msgPGN,6,0);
-   
+
    dataBytes[0] = getFunctInst() & 0b00001111;
    dataBytes[0] = dataBytes[0]<<4;
    dataBytes[0] = dataBytes[0] | ((byte)fluidType & 0b00001111);
@@ -409,11 +334,5 @@ void fluidLevelObj::sendMessage(void) {
    dataBytes[5] = (tempLong & 0x00FF0000)>>16;
    dataBytes[6] = (tempLong & 0xFF000000)>>24;
    dataBytes[7] = 0xFF;                            // Reserved, so..
-   //Serial.println("Data set we are going to send");
-   //showDataBytes();
-   CAN.beginExtendedPacket(address);
-   for (int i=0;i<7;i++) {
-      CAN.write(dataBytes[i]);
-   }
-   CAN.endPacket();
+   ourECU->sendMessage(ourPGN,6,0,8,dataBytes);
 }

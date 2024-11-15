@@ -3,6 +3,8 @@
 
 #include <lists.h>
 #include <idlers.h>
+#include <timeObj.h>
+#include <resizeBuff.h>
 #include <CAN.h>				// Need to objectify this to a base class. Then any chip should work.
 
 // CAN Header. This is all built on CAN Bus. Each message has a 39 bit header. Followed by 0..8 bytes data.
@@ -14,17 +16,31 @@
 #define REQ_MESSAGE	59904		// Request PGN. "Hey EVERYONE send out your name and address."
 #define ADDR_CLAIMED	60928		// Claimed PGN. "Hey EVERYONE this is my name and address." Or can't claim one.
 
+#define DEF_NUM_DATA_BYTES 8
 
 //				----- ECU Electronic control unit. -----
 
-
-// Decoding the 39 bit CAN header.
-struct msg_t {
-  uint32_t  pgn;			// Type of data (Parameter group number)
-  uint8_t   sa;			// Source address. -NMEA 2000 address-
+/*
+// Decoding the 29 bit CAN header.
+struct msgHeader {
+  uint32_t  PGN;			// Type of data (Parameter group number)
+  uint8_t   sourceAddr;	// Source address. -NMEA 2000 address-
   uint8_t   ps;			// Part of PGN
   uint8_t   dp;			// Part of PGN
   uint8_t   priority;	// CAN priority bits.
+};
+*/
+
+
+// Decoding the 29 bit CAN header.
+struct msgHeader {
+	uint32_t  PGN;				// Type of data (Parameter group number)
+	uint8_t   priority;		// CAN priority bits.
+	bool      R;				// Reserve bit.
+	bool      DP;				// Data page.
+	uint8_t   PDUf;			// PDU format
+	uint8_t   PDUs;			// PDU specific.
+	uint8_t   sourceAddr;	// Who sent this?
 };
 
 
@@ -37,9 +53,10 @@ class ECU :	public linkList,
 		
 				byte		getECUInst(void);
 				void		setECUInst(byte inInst);
-				void     readAddress(uint32_t can_id, msg_t * msg);
-				uint32_t	makeAddress(uint32_t PGN, uint8_t priority, uint8_t source);
-	virtual  void		handleMsg(uint32_t PGN) = 0;
+				void     readHeader(uint32_t CANID, msgHeader* inHeader);
+				uint32_t	makeHeader(uint32_t PGN, uint8_t priority, uint8_t sourceAddr);
+	virtual  void		sendMessage(uint32_t PGN,byte priority,byte address,int numBytes,byte* data)=0;
+	virtual  void			handlePacket(void)=0;
 	virtual	void		idle(void);	
 				
 	protected:
@@ -100,6 +117,9 @@ class CAName {
 		
 		void		clearName(void);							// Want to zero our name out? This'll do it.
 		
+		uint32_t	getPGN(void);								// This is one of the importante bits to decode.
+		void		setPGN(uint32_t PGN);					// And 
+		
 		bool		getArbitratyAddrBit(void);				// 1 bit - True, we CAN change our address. 128..247
 		void		setArbitratyAddrBit(bool AABit);		// False, we can't change our own address.
 		byte		getIndGroup(void);						// 3 bit - Assigned by committee. Tractor, car, boat..
@@ -154,7 +174,9 @@ class CA :	public linkListObj,
 				
 				void		setAddrCat(adderCat inAddrCat);	// How we deal with addressing.
 				adderCat	getAddrCat(void);						// See how we deal with addressing.
-				
+				int      getNumBytes(void);					// These get and set the size of the
+            void		setNumBytes(int inNumBytes);		// Data buffer. Default is 8.
+            
 				//	nonConfig
 				void	setNonConfigAddr(byte inAddr);
 				
@@ -172,16 +194,23 @@ class CA :	public linkListObj,
 				void	cannotClaimAddress(void);
 				void	commandedAddress(void);
 				
-				virtual	void idleTime(void);		// Same as idle, but called by the ECU.
+	virtual  void	sendMessage(void)=0;			
+				void	setSendInterval(float inMs);
+            float	getSendInterval(void);
+	virtual	void	idleTime(void);					// Same as idle, but called by the ECU.
 				
-	protected:
+				
 				enum	CAState { preStart, claiming, working };
 				
 				ECU*			ourECU;
+				uint32_t		ourPGN;
 				adderCat		ourAddrCat;
 				byte			defAddress;
 				byte			address;
+            int			numBytes;
+            byte*			dataBytes;
 				CAState		ourState;
+				timeObj		intervaTimer;
 };
 
 

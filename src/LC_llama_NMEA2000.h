@@ -4,24 +4,22 @@
 
 #include <idlers.h>
 #include <mapper.h>
-#include <timeObj.h>
 #include <CAN.h>
 #include <SAE_J1939.h>
 
 
 #define DEF_2515_RST_PIN   8
 #define DEF_2515_INT_PIN   2
-#define DEF_NUM_DATA_BYTES 8
 
+/*
 
-// Basically what are called parameter group numbers. Or PGN(s)
-enum msgTypes {
-  noType,
-  waterSpeed,  // 0x1F503
-  waterDepth,  // 0x1F50B
-  waterTemp,   // 0x1FD08
-  fluidLevel   // 0x1F211
-};
+Basically what are called parameter group numbers. Or PGN(s)
+
+waterSpeed,  // 0x1F503
+waterDepth,  // 0x1F50B
+waterTemp,   // 0x1FD08
+fluidLevel   // 0x1F211
+*/
 
 
 enum tankType {
@@ -33,16 +31,6 @@ enum tankType {
    blackWater
 };
 
-/*
-// Decoding the 39 bit CAN header.
-struct msg_t {
-  uint32_t  pgn;			// Type of data (Parameter group number)
-  uint8_t   sa;			// Source address. -NMEA 2000 address-
-  uint8_t   ps;			// Part of PGN
-  uint8_t   dp;			// Part of PGN
-  uint8_t   priority;	// CAN priority bits.
-};
-*/
 
 class CANMsgObj;
 
@@ -56,17 +44,16 @@ class llama_NMEA2000 :   public ECU {
             ~llama_NMEA2000(void);
 
             bool        begin(int inCSPin);
-            bool        addMsgObj(msgTypes inType,int inInstance=0);
+            bool        addMsgObj(uint32_t inPGN,int inInstance=0);
             CANMsgObj*  getMsgObj(uint32_t inPGN,int inInstance=0);
-            CANMsgObj*  getMsgObj(msgTypes inType,int inInstance=0);
-   virtual  void			handleMsg(uint32_t PGN);
+	virtual  void			sendMessage(uint32_t PGN,byte priority,byte address,int numBytes,byte* data);
+   virtual  void			handlePacket(void);
     
    protected:
-            //void        readAddress(uint32_t can_id, msg_t * msg);
     
-            int   resetPin;
-            int   intPin;
-            msg_t msg;
+            int			resetPin;
+            int			intPin;
+            msgHeader	header;
 };
 
 
@@ -80,23 +67,13 @@ class CANMsgObj : public CA {
             CANMsgObj(ECU* inECU);
             ~CANMsgObj(void);
 
-            msgTypes getType(void);
             uint32_t getPGN(void);
             
-            int      getNumBytes(void);
-            void		setNumBytes(int inNumBytes);
-   virtual  void     decodeMessage(void)=0;
+   virtual  void     handleMsg(void)=0;
             void     showDataBytes(void);
-            void     setSendInterval(float inMs);
-            float    getSendInterval(void);
-   virtual  void     sendMessage(void)=0;
-   virtual	void		idleTime(void);		// Same as idle, but called by the ECU.
+   virtual  void     sendMessage(void);
             
-            byte*    dataBytes;
-            int      numBytes;
-            msgTypes msgType;
-            uint32_t msgPGN;
-            timeObj  intervaTimer;
+            uint32_t	ourPGN;
 };
 
 
@@ -114,7 +91,7 @@ class waterSpeedObj  : public CANMsgObj {
    virtual  void  sendMessage(void);
    
    protected:
-   virtual  void  decodeMessage(void);
+   virtual  void  handleMsg(void);
              
           mapper  speedMap;
           float   knots;
@@ -135,7 +112,7 @@ class waterDepthObj  : public CANMsgObj {
    virtual  void  sendMessage(void);
    
    protected:
-  virtual   void  decodeMessage(void);
+  virtual   void  handleMsg(void);
   
   
             float feet;
@@ -156,7 +133,7 @@ class waterTempObj  : public CANMsgObj {
    virtual  void  sendMessage(void);
    
    protected:
-   virtual  void  decodeMessage(void);
+   virtual  void  handleMsg(void);
    
             float   degF;
 };
@@ -181,7 +158,7 @@ class fluidLevelObj  : public CANMsgObj {
    virtual  void     sendMessage(void);
           
    protected:
-   virtual  void     decodeMessage(void);
+   virtual  void     handleMsg(void);
    
             tankType fluidType;
             float    level;

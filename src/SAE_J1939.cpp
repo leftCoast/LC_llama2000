@@ -21,23 +21,29 @@ byte ECU::getECUInst(void) { return ECUInst; }
 void ECU::setECUInst(byte inInst) { ECUInst = inInst; }
 
 
-// Decoding the 39 bit CAN header.
-void ECU::readAddress (uint32_t can_id, msg_t* msg) {
+// Decoding the 29 bit CAN header.
+void ECU::readHeader(uint32_t CANID, msgHeader* inHeader) {
   
-  uint32_t buffer = can_id;
+  uint32_t buffer = CANID;
   
-  msg->sa = buffer & 0xFF;
-  buffer = buffer >> 8;
-  msg->pgn = buffer & 0x3FFFF;
-  msg->ps = buffer & 0xFF;
-  msg->dp = (buffer & 0xFF00) >> 8;
-  msg->priority = (buffer & 0x1C0000) >> 18;
+  inHeader->sourceAddr	= buffer & 0xFF;
+  buffer						= buffer >> 8;
+  inHeader->PGN			= buffer & 0x3FFFF;
+  inHeader->PDUs			= buffer & 0xFF;
+  buffer						= buffer >> 8;
+  inHeader->PDUf			= buffer & 0xFF;
+  buffer						= buffer >> 8;
+  inHeader->DP				= buffer & 0x01;
+  buffer						= buffer >> 1;
+  inHeader->R				= buffer & 0x01;
+  buffer						= buffer >> 1;
+  inHeader->priority		= buffer &0x07;
 }
 
 
-uint32_t ECU::makeAddress(uint32_t PGN, uint8_t priority, uint8_t source) {
+uint32_t ECU::makeHeader(uint32_t PGN, uint8_t priority, uint8_t sourceAddr) {
 
-	return ((PGN << 8) | priority << 26) | source;
+	return ((PGN << 8) | priority << 26) | sourceAddr;
 }
  
 
@@ -45,21 +51,13 @@ uint32_t ECU::makeAddress(uint32_t PGN, uint8_t priority, uint8_t source) {
 // Next is to see if any CA's need to output messages of their own.
 void ECU::idle(void) {
 
-	int         packetSize;
-	uint32_t    theID;
-   msg_t       msg;
 	CA*			trace;
-	
-   packetSize = CAN.parsePacket();							// Check to see if a packet came though.
-   if (packetSize) {												// If we got a packet..
-      theID = CAN.packetId();									// Read it's ID (PGN + ADDRESS).
-      readAddress (theID, &msg);								// Decode the ID.
-      handleMsg(msg.pgn);
-   }
-	trace = (CA*)getFirst();
-	while(trace) {
-		trace->idleTime();
-		trace = (CA*)trace->getNext();
+
+   handlePacket();							// If polling, and that's what's up now. We see if a message has arrived.
+	trace = (CA*)getFirst();				// Well start at the beginning and let 'em all have a go.
+	while(trace) {								// While we got something..
+		trace->idleTime();					// Give 'em some time to do things.
+		trace = (CA*)trace->getNext();	// Grab the next one.
 	}
 }
 
@@ -260,6 +258,7 @@ byte* CAName::getName(void) {
 	return nameBuff;
 }
 
+
 // If we want to decode one?
 void CAName::setName(byte* namePtr) {
 	
@@ -276,14 +275,32 @@ void CAName::setName(byte* namePtr) {
 CA::CA(ECU* inECU)
 	: linkListObj(), CAName() {
 	
-	ourECU		= inECU;			// Pointer back to our "boss". 
-	ourAddrCat	= nonConfig;	// These three are just defaults.
-	defAddress	= 0;				// Whom ever we end up "in", will set these up
-	address = NULL_ADDR;			// to fit their function.
+	ourECU		= inECU;					// Pointer back to our "boss".
+	ourPGN		= 0;						// Default to zero.
+	ourAddrCat	= nonConfig;			// These three are just defaults.
+	defAddress	= 0;						// Whom ever we end up "in", will set these up.
+	address		= NULL_ADDR;			// 'Cause we don't have one?
+   dataBytes	= NULL;					// So we can use resizeBuff().
+   setNumBytes(DEF_NUM_DATA_BYTES);	// Set the default size.
+   intervaTimer.reset();				// Default to off.
 }
 
 
-CA::~CA(void) {  }
+// Basically we recycle the buffer.
+CA::~CA(void) { resizeBuff(0,&dataBytes); }
+
+
+int CA::getNumBytes(void) { return numBytes; }
+
+
+void CA::setNumBytes(int inNumBytes) {
+
+	if (resizeBuff(inNumBytes,&dataBytes)) {
+      numBytes = inNumBytes;
+   } else {
+   	numBytes = 0;
+   }
+}
 
 				
 // How we deal with addressing.
@@ -297,7 +314,7 @@ void CA::setAddrCat(adderCat inAddrCat) { ourAddrCat = inAddrCat; }
 void CA::setNonConfigAddr(byte inAddr) {
 
 	address = inAddr;
-	
+	setAddrCat(nonConfig);
 }
 
 	
@@ -322,8 +339,14 @@ void CA::setDefAddr(byte inAddr) {
 	defAddress = inAddr;
 }
 
+
 // arbitraryConfig
 void CA::requestForAddressClaim(void) {
+	
+	//uint32_t addr;
+	
+	//addr = ourECU->makeHeader(REQ_MESSAGE,6,address);
+	//sendMessage();
 
 }
 
@@ -342,9 +365,30 @@ void CA::commandedAddress(void) {
 
 }
 
-// Same as idle, but called by the ECU.				
-void CA::idleTime(void) {
 
+void CA::setSendInterval(float inMs) {
+
+   if (inMs>0) {
+      intervaTimer.setTime(inMs);
+   } else {
+      intervaTimer.reset();
+   }
 }
+ 
+
+float CA::getSendInterval(void) {  return intervaTimer.getTime(); }
+ 
+
+// Same as idle, but called by the ECU.	 
+void  CA::idleTime(void) {
+
+   if (intervaTimer.ding()) {
+      sendMessage();
+      intervaTimer.stepTime();
+   }
+}
+
+
+
 		
 				
