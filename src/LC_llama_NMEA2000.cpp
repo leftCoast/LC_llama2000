@@ -151,7 +151,7 @@ void llama_NMEA2000::handlePacket(void) {
 			while (CAN.available()&&i<numBytes) {			// While we have a byte to read and a place to put it..
 				messageObj->dataBytes[i] = CAN.read();		// Read and store the byte into the messageObj.
 				i++;													// Bump of the storage index.
-			}															==========================//
+			}															//
 			messageObj->handleMsg();							// All stored, let the messageObj deal with it.
 		} else {
 			Serial.println("-------------------");
