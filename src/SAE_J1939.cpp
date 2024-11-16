@@ -1,24 +1,183 @@
 #include <SAE_J1939.h>
 
 
-byte nameBuff[8];		// Global name buffer for when people want to grab the 8 bytes from the CAName class.
+
+
+//  -----------  ECUname class  -----------
+
+byte nameBuff[8];		// Global name buffer for when people want to grab the 8 bytes from the ECUname class.
+
+
+// Packed eight byte set of goodies.
+ECUname::ECUname(void) { clearName(); }
+
+ECUname::~ECUname(void) {  }
+
+
+// Just in case you need to clear it out.
+void ECUname::clearName(void) {
+
+	for(int i=0;i<7;i++) {
+		name[i] = 0;
+	}
+}
+
+
+// We the same as that guy?
+bool ECUname::sameName(ECUname* inName) {
+	
+	for(int i=0;i<7;i++) {
+		if (name[i] != inName->name[i]) return false;
+	}
+}
+
+			
+// 64 bit - Pass back ta copy of the 64 bits that this makes up as our name.
+byte* ECUname::getName(void) {						
+	for (int i=0;i<7;i++) {
+		nameBuff[i] = name[i];
+	}
+	return nameBuff;
+}
+
+
+// If we want to decode one?
+void ECUname::setName(byte* namePtr) {
+	
+	for (int i=0;i<7;i++) {
+		name[i] = namePtr[i];
+	}
+}
+
+
+// Byte 8
+// 1 bit - True, we CAN change our address. 128..247	
+// False, we can't change our own address.
+bool ECUname::getArbitratyAddrBit(void) { return name[7] >> 7; }    
+
+
+void ECUname::setArbitratyAddrBit(bool AABit) { 
+ 
+	name[7] &= ~(1<<7);								//Clear bit
+	name[7] = name[7] | ((AABit & 0x1)<<7);
+}
+
+
+// 3 bit - Assigned by committee. Tractor, car, boat..
+indGroup ECUname::getIndGroup(void) { 
+	
+	byte group;
+	
+	group = name[7]>>4 & 0x7;
+	return (indGroup) group;
+}
+
+
+void ECUname::setIndGroup(indGroup inGroup) {
+	
+	byte group;
+	
+	group = byte(inGroup);
+	name[7] &= ~(0x7<<4);								//Clear bits
+	name[7] = name[7] | ((group & 0x7)<<4);
+}
+
+
+// 4 bit - System instance, like engine1 or engine2.
+byte ECUname::getSystemInst(void) { return name[7] & 0xF; }
+
+
+void ECUname::setSystemInst(byte sysInst) {
+	
+	name[7] &= ~(0xF);							//Clear bits
+	name[7] = name[7] | (sysInst & 0xF);
+}
+
+
+//Byte7
+// 7 bit - Assigned by committee.
+byte ECUname::getVehSys(void) { return (name[6] >> 1); }
+
+
+void ECUname::setVehSys(byte vehSys) {
+
+	name[6] = 0;								//Clear bits
+	name[6] = name[6] | (vehSys << 1);
+}
+
+
+//Byte6
+// 8 bit - Assigned by committee. 0..127 absolute definition.
+// 128+ need other fields for definition.
+byte ECUname::getFunction(void) { return name[5]; }
+
+
+void ECUname::setFunction(byte funct) { name[5] = funct; }
+
+
+//Byte5
+// 5 bit - Instance of this function. (Fuel level?)
+byte ECUname::getFunctInst(void) { return name[4] >> 3; }
+
+
+void ECUname::setFunctInst(byte functInst) {
+
+	name[4] &= ~(0x1F << 3);								//Clear bits
+	name[4] = name[4] | ((functInst & 0x1F) << 3);
+}
+
+
+// 3 bit - What processor instance are we?
+byte ECUname::getECUInst(void) { return name[4] & 0x7; }
+
+void ECUname::setECUInst(byte inst) {
+
+	name[4] &= ~(0x7);
+	name[4] = name[4] | (inst & 0x7);
+}
+
+
+//Byte4/3
+// 11 bit - Assigned by committee. Who made this thing?
+uint16_t ECUname::getManufCode(void) { return name[3]<<3 | (name[2] >> 5);  }
+
+
+void ECUname::setManufCode(uint16_t manfCode) {
+
+	name[2] &= ~(0x7<<5); //Clear bits byte 3
+	name[3] = 0; //Clear bits byte 4
+	name[2] = name[2] | (manfCode<<3 & 0xE0);
+	name[3] = manfCode>>3;
+}
+
+
+//Byte3/2/1
+// 21 bit - Unique Fixed value. Product ID & Serial number kinda' thing.
+uint32_t ECUname::getID(void) { return (name[2] & 0x1F) << 16 | (name[1] << 8) | name[0]; }
+
+
+void ECUname::setID(uint32_t value) {
+
+	name[0] = value & 0xFF;
+	name[1] = (value >> 8) & 0xFF;
+	name[2] &= ~(0x1F); //Clear bits
+	name[2] = name[2] | ((value >> 16) & 0x1F);
+}
+
+
+
+//				----- ECU Electronic control unit. -----
 
 
 // Electronic control unit.						
 ECU::ECU(byte inECUInst)
 	: linkList(), idler() {
 	
-	ECUInst = inECUInst;
+	setECUInst(inECUInst);
 }
 
 
 ECU::~ECU(void) {  }
-
-		
-byte ECU::getECUInst(void) { return ECUInst; }
-
-
-void ECU::setECUInst(byte inInst) { ECUInst = inInst; }
 
 
 // Decoding the 29 bit CAN header.
@@ -41,9 +200,9 @@ void ECU::readHeader(uint32_t CANID, msgHeader* inHeader) {
 }
 
 
-uint32_t ECU::makeHeader(uint32_t PGN, uint8_t priority, uint8_t sourceAddr) {
+uint32_t ECU::makeHeader(uint32_t PGN, uint8_t priority) {
 
-	return ((PGN << 8) | priority << 26) | sourceAddr;
+	return ((PGN << 8) | priority << 26) | getAddr();
 }
  
 
@@ -61,9 +220,6 @@ void ECU::idle(void) {
 	}
 }
 
-
-
-
 /*
  Addressing categories for CA's. Choose one.
 enum adderCat {
@@ -77,153 +233,75 @@ enum adderCat {
 };
 */
 
-//  -----------  CAName class  -----------
+
+// See how we deal with addressing.
+adderCat ECU::getAddrCat(void) { return ourAddrCat; }
 
 
-// Packed eight byte set of goodies.
-CAName::CAName(void) {  }
+// Set how we deal with addressing.
+void ECU::setAddrCat(adderCat inAddrCat) {
 
-CAName::~CAName(void) {  }
-
-
-// Just in case you need to clear it out.
-void CAName::clearName(void) {
-
-	for(int i=0;i<7;i++) {
-		name[0] = 0;
-	}
+	ourAddrCat = inAddrCat;
+	setArbitratyAddrBit(ourAddrCat==arbitraryConfig);
 }
 
 
-// Byte 8
-// 1 bit - True, we CAN change our address. 128..247	
-// False, we can't change our own address.
-bool CAName::getArbitratyAddrBit(void) { return name[7] >> 7; }    
+// serviceConfig
+// commandConfig
+// selfConfig
+byte ECU::getAddr(void) { return addr; }
 
 
-void CAName::setArbitratyAddrBit(bool AABit) { 
- 
-	name[7] &= ~(1<<7);								//Clear bit
-	name[7] = name[7] | ((AABit & 0x1)<<7);
-}
 
-
-// 3 bit - Assigned by committee. Tractor, car, boat..
-byte CAName::getIndGroup(void) { return (name[7]>>4 & 0x7); }
-
-void CAName::setIndGroup(byte indGroup) {
+void ECU::setAddr(byte inAddr) { addr = inAddr; }
 	
-	name[7] &= ~(0x7<<4);								//Clear bits
-	name[7] = name[7] | ((indGroup & 0x7)<<4);
+
+
+byte ECU::getDefAddr(void) { return defAddr; }
+
+
+
+void ECU::setDefAddr(byte inAddr) {
+
+	defAddr = inAddr;
 }
 
 
-// 4 bit - System instance, like engine1 or engine2.
-byte CAName::getSystemInst(void) { return name[7] & 0xF; }
-
-void CAName::setSystemInst(byte sysInst) {
+// arbitraryConfig
+void ECU::requestForAddressClaim(void) {
 	
-	name[7] &= ~(0xF);							//Clear bits
-	name[7] = name[7] | (sysInst & 0xF);
-}
-
-
-//Byte7
-// 7 bit - Assigned by committee.
-byte CAName::getVehSys(void) { return (name[6] >> 1); }
-
-void CAName::setVehSys(byte vehSys) {
-
-	name[6] = 0;								//Clear bits
-	name[6] = name[6] | (vehSys << 1);
-}
-
-
-//Byte6
-// 8 bit - Assigned by committee. 0..127 absolute definition.
-// 128+ need other fields for definition.
-byte CAName::getFunction(void) { return name[5]; }
-
-void CAName::setFunction(byte funct) { name[5] = funct; }
-
-
-//Byte5
-// 5 bit - Instance of this function. (Fuel level?)
-byte CAName::getFunctInst(void) { return name[4] >> 3; }
-
-void CAName::setFunctInst(byte functInst) {
-
-	name[4] &= ~(0x1F << 3);								//Clear bits
-	name[4] = name[4] | ((functInst & 0x1F) << 3);
-}
-
-
-// 3 bit - What processor instance are we?
-byte CAName::getECUInst(void) { return name[4] & 0x7; }
-
-void CAName::setECUInst(byte inst) {
-
-	name[4] &= ~(0x7);
-	name[4] = name[4] | (inst & 0x7);
-}
-
-
-//Byte4/3
-// 11 bit - Assigned by committee. Who made this thing?
-uint16_t CAName::getManufCode(void) { return name[3]<<3 | (name[2] >> 5);  }
-
-void CAName::setManufCode(uint16_t manfCode) {
-
-	name[2] &= ~(0x7<<5); //Clear bits byte 3
-	name[3] = 0; //Clear bits byte 4
-	name[2] = name[2] | (manfCode<<3 & 0xE0);
-	name[3] = manfCode>>3;
-}
-
-
-//Byte3/2/1
-// 21 bit - Unique Fixed value. Product ID & Serial number kinda' thing.
-uint32_t CAName::getID(void) { return (name[2] & 0x1F) << 16 | (name[1] << 8) | name[0]; }
-
-void CAName::setID(uint32_t value) {
-
-	name[0] = value & 0xFF;
-	name[1] = (value >> 8) & 0xFF;
-	name[2] &= ~(0x1F); //Clear bits
-	name[2] = name[2] | ((value >> 16) & 0x1F);
-}
-
-
-// 64 bit - Pass back the packed up 64 bits that this makes up as our name.
-byte* CAName::getName(void) {						
-	for (int i=0;i<7;i++) {
-		nameBuff[i] = name[i];
-	}
-	return nameBuff;
-}
-
-
-// If we want to decode one?
-void CAName::setName(byte* namePtr) {
+	//uint32_t addr;
 	
-	for (int i=0;i<7;i++) {
-		name[i] = namePtr[i];
-	}
+	//addr = ourECU->makeHeader(REQ_MESSAGE,6,address);
+	//sendMessage();
+
 }
-	
+
+
+void ECU::addressClaimed(void) {
+
+}
+
+
+void ECU::cannotClaimAddress(void) {
+
+}
+
+
+void ECU::commandedAddress(void) {
+
+}
+
 			
 		
 //  -----------  CA class  -----------
 
 
 CA::CA(ECU* inECU)
-	: linkListObj(), CAName() {
+	: linkListObj() {
 	
 	ourECU		= inECU;					// Pointer back to our "boss".
 	ourPGN		= 0;						// Default to zero.
-	ourAddrCat	= nonConfig;			// These three are just defaults.
-	defAddress	= 0;						// Whom ever we end up "in", will set these up.
-	address		= NULL_ADDR;			// 'Cause we don't have one?
    dataBytes	= NULL;					// So we can use resizeBuff().
    setNumBytes(DEF_NUM_DATA_BYTES);	// Set the default size.
    intervaTimer.reset();				// Default to off.
@@ -244,69 +322,6 @@ void CA::setNumBytes(int inNumBytes) {
    } else {
    	numBytes = 0;
    }
-}
-
-				
-// How we deal with addressing.
-adderCat CA::getAddrCat(void) { return ourAddrCat; }
-
-
-void CA::setAddrCat(adderCat inAddrCat) { ourAddrCat = inAddrCat; }
-
-
-//	nonConfig
-void CA::setNonConfigAddr(byte inAddr) {
-
-	address = inAddr;
-	setAddrCat(nonConfig);
-}
-
-	
-
-// serviceConfig
-// commandConfig
-// selfConfig
-byte CA::getAddr(void) { return address; }
-
-
-
-void CA::setAddr(byte inAddr) { address = inAddr; }
-	
-
-
-byte CA::getDefAddr(void) { return defAddress; }
-
-
-
-void CA::setDefAddr(byte inAddr) {
-
-	defAddress = inAddr;
-}
-
-
-// arbitraryConfig
-void CA::requestForAddressClaim(void) {
-	
-	//uint32_t addr;
-	
-	//addr = ourECU->makeHeader(REQ_MESSAGE,6,address);
-	//sendMessage();
-
-}
-
-
-void CA::addressClaimed(void) {
-
-}
-
-
-void CA::cannotClaimAddress(void) {
-
-}
-
-
-void CA::commandedAddress(void) {
-
 }
 
 

@@ -12,7 +12,6 @@
 #define DEF_2515_INT_PIN   2
 
 /*
-
 Basically what are called parameter group numbers. Or PGN(s)
 
 waterSpeed,  // 0x1F503
@@ -44,9 +43,9 @@ class llama_NMEA2000 :   public ECU {
             ~llama_NMEA2000(void);
 
             bool        begin(int inCSPin);
-            bool        addMsgObj(uint32_t inPGN,int inInstance=0);
-            CANMsgObj*  getMsgObj(uint32_t inPGN,int inInstance=0);
-	virtual  void			sendMessage(uint32_t PGN,byte priority,byte address,int numBytes,byte* data);
+            bool        addMsgObj(uint32_t inPGN);
+            CANMsgObj*  getMsgObj(uint32_t inPGN);
+	virtual  void			sendMessage(uint32_t PGN,byte priority,int numBytes,byte* data);
    virtual  void			handlePacket(void);
    		  	void			showCANID(msgHeader CANID);
     

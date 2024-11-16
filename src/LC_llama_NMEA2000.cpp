@@ -81,13 +81,13 @@ bool llama_NMEA2000::begin(int inCSPin) {
 }
 
 
-CANMsgObj* llama_NMEA2000::getMsgObj(uint32_t inPGN,int inInstance) {
+CANMsgObj* llama_NMEA2000::getMsgObj(uint32_t inPGN) {
 
   CANMsgObj* trace;
   
   trace = (CANMsgObj*)getFirst();
   while(trace) {
-    if (trace->getPGN()==inPGN && trace->getFunctInst()==inInstance) {
+    if (trace->getPGN()==inPGN) {
       return trace;
     }
     trace = (CANMsgObj*)trace->getNext();
@@ -96,16 +96,15 @@ CANMsgObj* llama_NMEA2000::getMsgObj(uint32_t inPGN,int inInstance) {
 }
 
 
-bool llama_NMEA2000::addMsgObj(uint32_t inPGN,int inInstance) {
+bool llama_NMEA2000::addMsgObj(uint32_t inPGN) {
 
    CANMsgObj* newMsgObj;
   
-   if (!getMsgObj(inPGN,inInstance)) {
+   if (!getMsgObj(inPGN)) {
       newMsgObj = createMsgObj(this,inPGN);
       if (!newMsgObj) {
           return false;
       } else {
-      	newMsgObj->setFunctInst(inInstance);
          addToTop(newMsgObj);
       }
    }
@@ -113,15 +112,15 @@ bool llama_NMEA2000::addMsgObj(uint32_t inPGN,int inInstance) {
 }
 
 
-void llama_NMEA2000::sendMessage(uint32_t PGN,byte priority,byte address,int numBytes,byte* data) {
+void llama_NMEA2000::sendMessage(uint32_t PGN,byte priority,int numBytes,byte* data) {
 	
    uint32_t header;
    
    Serial.println("sendMessage()");
-   header = makeHeader(PGN,priority,address);
+   header = makeHeader(PGN,priority);
    Serial.print("writing\t");Serial.print(PGN,HEX);Serial.print('\t');
    Serial.print(priority); Serial.print('\t');
-   Serial.print(address); Serial.print('\t');
+   Serial.print(addr); Serial.print('\t');
    Serial.println(numBytes);
    CAN.beginExtendedPacket(header);
    for (int i=0;i<numBytes;i++) {
@@ -145,22 +144,19 @@ void llama_NMEA2000::handlePacket(void) {
    if (packetSize) {												// If we got a packet..
       theCANID = CAN.packetId();								// Read it's ID (PGN + ADDRESS).
       readHeader(theCANID, &header);						// Decode the ID.
-      Serial.println("-------------------");
-      showCANID(header);
 		messageObj = (CANMsgObj*)getMsgObj(header.PGN);	// See if we can find a messageObj (CA) that will handle this..
 		if (messageObj) {											// If we do have a messageObj to handle it..
 			numBytes = messageObj->getNumBytes();			// Read the size of it's storage buffer.
 			i = 0;													// Starting at zero..
-			Serial.print(header.PGN,HEX);Serial.print('\t');
 			while (CAN.available()&&i<numBytes) {			// While we have a byte to read and a place to put it..
 				messageObj->dataBytes[i] = CAN.read();		// Read and store the byte into the messageObj.
-				Serial.print(messageObj->dataBytes[i]);
-				Serial.print('\t');
 				i++;													// Bump of the storage index.
 			}															//
-			Serial.println();
 			messageObj->handleMsg();							// All stored, let the messageObj deal with it.
-		}
+		} else {
+			Serial.println("-------------------");
+      	showCANID(header);
+      }
 	}
 }
 
@@ -332,7 +328,7 @@ void fluidLevelObj::sendMessage(void) {
    int16_t  tempInt;
    int32_t  tempLong;
 
-   dataBytes[0] = getFunctInst() & 0b00001111;
+   dataBytes[0] = 0/*instance*/ & 0b00001111;
    dataBytes[0] = dataBytes[0]<<4;
    dataBytes[0] = dataBytes[0] | ((byte)fluidType & 0b00001111);
    
@@ -345,5 +341,5 @@ void fluidLevelObj::sendMessage(void) {
    dataBytes[5] = (tempLong & 0x00FF0000)>>16;
    dataBytes[6] = (tempLong & 0xFF000000)>>24;
    dataBytes[7] = 0xFF;                            // Reserved, so..
-   ourECU->sendMessage(ourPGN,6,0,8,dataBytes);
+   ourECU->sendMessage(ourPGN,6,8,dataBytes);
 }

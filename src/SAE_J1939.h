@@ -20,8 +20,74 @@
 #define DEF_NUM_DATA_BYTES 8
 
 
+
+//				----- ECU name -----
+
+
+enum indGroup {
+
+	Global,
+	Highway,
+	Agriculture,
+	Construction,
+	Marine,
+	Industrial
+};
+
+
+
+// Packed eight byte set of goodies.
+class ECUname {
+	
+	public:
+					ECUname(void);
+	virtual		~ECUname(void);
+		
+		void		clearName(void);							// Want to zero our name out? This'll do it.
+		bool		sameName(ECUname* inName);				// We the same as that guy?
+		byte*		getName(void);								// 64 bit - Pass back the packed up 64 bits that this makes up as our name.
+		void		setName(byte* namePtr);					// Make this 64 bits our name.
+		
+		bool		getArbitratyAddrBit(void);				// 1 bit - True, we CAN change our address. 128..247
+		void		setArbitratyAddrBit(bool AABit);		// False, we can't change our own address.
+		indGroup	getIndGroup(void);						// 3 bit - Assigned by committee. Tractor, car, boat..
+		void		setIndGroup(indGroup inGroup);
+		byte		getSystemInst(void);						// 4 bit - System instance, like engine1 or engine2.
+		void		setSystemInst(byte sysInst);
+		byte		getVehSys(void);							// 7 bit - Assigned by committee. 
+		void		setVehSys(byte vehSys);					//
+																	// One bit reserved field. Set to zero. 
+		byte		getFunction(void);						// 8 bit - Assigned by committee. 0..127 absolute definition.
+		void		setFunction(byte funct);				// 128+ need other fields for definition.
+		byte		getFunctInst(void);						// 5 bit - Instance of this function. Multi clone ECIUs?
+		void		setFunctInst(byte functInst);			//
+		byte		getECUInst(void);							// 3 bit - What processor instance are we?
+		void		setECUInst(byte inst);					// 
+		uint16_t	getManufCode(void);						// 11 bit - Assigned by committee. Who made this thing?
+		void		setManufCode(uint16_t manufCode);	//
+		uint32_t	getID(void);								// 21 bit - Unique Fixed value. Product ID & Serial number kinda' thing.
+		void		setID(uint32_t inID);
+		
+	protected:
+		
+		byte			name[8];									// The stored 8 byte. 64 bit name.
+};
+
+
+
 //				----- ECU Electronic control unit. -----
 
+
+// Addressing categories for ECU's. Choose one.
+enum adderCat {
+
+	nonConfig,			// Address is hard coded.
+	serviceConfig,		// You can hook up equipment to change our address.
+	commandConfig,		// We can respond to address change messages.
+	selfConfig,			// We set our own depending on how the network is set up.
+	arbitraryConfig,	// We can do the arbitrary addressing dance.
+	noAddress			// We have no address, just a listener, or broadcaster.
+};
 
 
 // Decoding the 29 bit CAN/J1939 header.
@@ -36,100 +102,22 @@ struct msgHeader {
 };
 
 
+
 class ECU :	public linkList,
-				public idler {							
+				public idler,
+				public ECUname {							
 
 	public:
 				ECU(byte inECUInst=0);
 	virtual	~ECU(void);
 		
-				byte		getECUInst(void);
-				void		setECUInst(byte inInst);
 				void     readHeader(uint32_t CANID, msgHeader* inHeader);
-				uint32_t	makeHeader(uint32_t PGN, uint8_t priority, uint8_t sourceAddr);
-	virtual  void		sendMessage(uint32_t PGN,byte priority,byte address,int numBytes,byte* data)=0;
+				uint32_t	makeHeader(uint32_t PGN, uint8_t priority);
+	virtual  void		sendMessage(uint32_t PGN,byte priority,int numBytes,byte* data)=0;
 	virtual  void		handlePacket(void)=0;
-	virtual	void		idle(void);	
-				
-	protected:
-		byte	ECUInst;
-};
-
-
-//				----- Controller name -----
-
-
-// Packed eight byte set of goodies.
-class CAName {
 	
-	public:
-					CAName(void);
-	virtual		~CAName(void);
-		
-		void		clearName(void);							// Want to zero our name out? This'll do it.
-		
-		uint32_t	getPGN(void);								// This is one of the importante bits to decode.
-		void		setPGN(uint32_t PGN);					// And 
-		
-		bool		getArbitratyAddrBit(void);				// 1 bit - True, we CAN change our address. 128..247
-		void		setArbitratyAddrBit(bool AABit);		// False, we can't change our own address.
-		byte		getIndGroup(void);						// 3 bit - Assigned by committee. Tractor, car, boat..
-		void		setIndGroup(byte indGroup);
-		byte		getSystemInst(void);						// 4 bit - System instance, like engine1 or engine2.
-		void		setSystemInst(byte sysInst);
-		byte		getVehSys(void);							// 7 bit - Assigned by committee. 
-		void		setVehSys(byte vehSys);					//
-																	// One bit reserved field. Set to zero. 
-		byte		getFunction(void);						// 8 bit - Assigned by committee. 0..127 absolute definition.
-		void		setFunction(byte funct);				// 128+ need other fields for definition.
-		byte		getFunctInst(void);						// 5 bit - Instance of this function. (Fuel level?)
-		void		setFunctInst(byte functInst);			//
-		byte		getECUInst(void);							// 3 bit - What processor instance are we?
-		void		setECUInst(byte inst);					// 
-		uint16_t	getManufCode(void);						// 11 bit - Assigned by committee. Who made this thing?
-		void		setManufCode(uint16_t manufCode);	//
-		uint32_t	getID(void);								// 21 bit - Unique Fixed value. Product ID & Serial number kinda' thing.
-		void		setID(uint32_t inID);
-		byte*		getName(void);								// 64 bit - Pass back the packed up 64 bits that this makes up as our name.
-		void		setName(byte* namePtr);					// If we want to decode one?
-		
-	protected:
-		
-		byte			name[8];
-};
-
-
-
-//				----- CA Controller application -----
-
-
-// Addressing categories for CA's. Choose one.
-enum adderCat {
-
-	nonConfig,			// Address is hard coded.
-	serviceConfig,		// You can hook up equipment to change our address.
-	commandConfig,		// We can respond to address change messages.
-	selfConfig,			// We set our own depending on how the network is set up.
-	arbitraryConfig,	// We can do the arbitrary addressing dance.
-	noAddress			// We have no address, just a listener, or broadcaster.
-};
-
-
-// Controller application.
-class CA :	public linkListObj,
-				public CAName {	
-
-	public:
-				CA(ECU* inECU);
-				~CA(void);
-				
-				void		setAddrCat(adderCat inAddrCat);	// How we deal with addressing.
-				adderCat	getAddrCat(void);						// See how we deal with addressing.
-				int      getNumBytes(void);					// These get and set the size of the
-            void		setNumBytes(int inNumBytes);		// Data buffer. Default is 8.
-            
-				//	nonConfig
-				void	setNonConfigAddr(byte inAddr);
+	void		setAddrCat(adderCat inAddrCat);		// How we deal with addressing.
+				adderCat	getAddrCat(void);				// See how we deal with addressing.
 				
 				// serviceConfig
 				// commandConfig
@@ -145,23 +133,40 @@ class CA :	public linkListObj,
 				void	cannotClaimAddress(void);
 				void	commandedAddress(void);
 				
+	virtual	void		idle(void);
+	
+				enum	ECUState { preStart, claiming, working };
+				
+				adderCat	ourAddrCat;
+				byte		defAddr;
+				byte		addr;	
+};
+
+
+
+//				----- CA Controller application -----
+
+
+// Controller application.
+class CA :	public linkListObj {	
+
+	public:
+				CA(ECU* inECU);
+				~CA(void);
+				
+				int	getNumBytes(void);				// These get and set the size of the
+            void	setNumBytes(int inNumBytes);	// Data buffer. Default is 8.
+				
 	virtual  void	sendMessage(void)=0;			
 				void	setSendInterval(float inMs);
             float	getSendInterval(void);
-	virtual	void	idleTime(void);					// Same as idle, but called by the ECU.
+	virtual	void	idleTime(void);						// Same as idle, but called by the ECU.
 				
-				
-				enum	CAState { preStart, claiming, working };
-				
-				ECU*			ourECU;
-				uint32_t		ourPGN;
-				adderCat		ourAddrCat;
-				byte			defAddress;
-				byte			address;
-            int			numBytes;
-            byte*			dataBytes;
-				CAState		ourState;
-				timeObj		intervaTimer;
+				ECU*		ourECU;
+				uint32_t	ourPGN;
+            int		numBytes;
+            byte*		dataBytes;
+				timeObj	intervaTimer;
 };
 
 
