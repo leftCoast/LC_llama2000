@@ -1,6 +1,171 @@
 #include <SAE_J1939.h>
 
 
+//				----- message class -----
+
+/*
+// Decoding the 29 bit CAN/J1939 header.
+struct msgHeader {
+	uint32_t  PGN;				// Type of data (Parameter group number)
+	uint8_t   priority;		// CAN priority bits.
+	bool      R;				// Reserve bit.
+	bool      DP;				// Data page.
+	uint8_t   PDUf;			// PDU format
+	uint8_t   PDUs;			// PDU specific.
+	uint8_t   sourceAddr;	// Who sent this?
+};
+*/
+
+
+message::message(int inNumBytes) {
+		
+		priority		= DEF_PRIORITY;	// Something to get us going.
+		R				= DEF_R;				// Reserve bit.
+		DP				= DEF_DP;			// Data page.
+		PDUf			= 0;					// PDU format
+		PDUs			= 0;					// PDU specific.
+		sourceAddr	= 0;					// Who sent this?
+		numBytes		= 0;					// Because now, it is.
+		msgData		= NULL;				// Default so we can use resizeBuff().
+		setNumBytes(inNumBytes);		// Set the default size.
+}
+
+
+message::~message(void) { setNumBytes(0); }
+
+		
+void message::setNumBytes(int inNumBytes) {
+
+	if (inNumBytes != numBytes) {
+		if (resizeBuff(inNumBytes,&msgData)) {
+			numBytes = inNumBytes;
+		} else {
+			numBytes = 0;
+		}
+	}
+}
+
+
+int message::getNumBytes(void) { return numBytes; }
+
+		
+void message::setCANID(uint32_t CANID) {
+  
+  sourceAddr	= CANID & 0xFF;
+  CANID			= CANID >> 8;
+  PDUs			= CANID & 0xFF;
+  CANID			= CANID >> 8;
+  PDUf			= CANID & 0xFF;
+  CANID			= CANID >> 8;
+  DP				= CANID & 0x01;
+  CANID			= CANID >> 1;
+  R				= CANID & 0x01;
+  CANID			= CANID >> 1;
+  priority		= CANID &0x07;
+}
+
+
+uint32_t message::getCANID(void) {
+
+	uint32_t PGN;
+	
+	PGN = getPGN();
+	return ((PGN << 8) | priority << 26) | sourceAddr;
+}
+
+			
+void message::setPGN(uint32_t PGN) {
+
+	PDUs	= PGN & 0x0FF;
+	PGN	= PGN >> 8;
+	PDUf	= PGN & 0x0FF;
+	PGN	= PGN >> 8;
+	DP		= PGN & 0x01;
+	PGN	= PGN >> 1;
+	R		= PGN & 0x01;
+}
+
+	
+uint32_t message::getPGN(void) {
+
+	uint32_t PGN;
+    
+	PGN = 0;
+	if (R) {
+		bitWrite(PGN, 0, 1);
+	}
+	PGN = PGN << 1;
+	if (DP) {
+		bitWrite(PGN, 0, 1);
+	}
+	PGN = PGN << 8;
+	PGN = PGN | PDUf;
+	PGN = PGN << 8;
+	PGN = PGN | PDUs;
+	return PGN;
+}
+
+
+void message::setPriority(byte inPriority) { priority = inPriority; }
+
+
+byte message::getPriority(void) { return priority; }
+
+
+void message::setR(bool inR) { R = inR; }
+
+
+bool message::getR(void) { return R; }
+
+
+void message::setDP(bool inDP) { DP = inDP; }
+
+
+bool message::getDP(void) { return DP; }
+
+
+void message::setPDUf(byte inPDUf) { PDUf = inPDUf; }
+
+
+byte message::getPDUf(void) { return PDUf; }
+
+
+void message::setPDUs(byte inPDUs) { PDUs = inPDUs; } 
+
+
+byte message::getPDUs(void) { return PDUs; }
+
+
+void message::setSourceAddr(byte inSourceAddr) { sourceAddr = inSourceAddr; }
+
+
+byte message::getSourceAddr(void) { return sourceAddr; }
+
+
+void message::setData(int index,byte inByte) { msgData[index] = inByte; }
+
+
+byte message::getData(int index) { return msgData[index]; }
+
+	
+void message::showMessage(void) {
+
+	Serial.print("PGN           : "); Serial.println(getPGN(),HEX);
+	Serial.print("Priority      : "); Serial.println(priority);
+	Serial.print("Reserve bit   : "); Serial.println(R);
+	Serial.print("Data page bit : "); Serial.println(DP);
+	Serial.print("PDU format    : "); Serial.println(PDUf);
+	Serial.print("PDU specific  : "); Serial.println(PDUs);
+	Serial.print("Source addr   : "); Serial.println(sourceAddr);
+	Serial.println("Data");
+	for (int i=0;i<numBytes;i++) {
+		Serial.print("[ ");Serial.print(msgData[i]);Serial.print(" ]");Serial.print('\t');
+	}
+	Serial.println();
+	for (int i=0;i<numBytes;i++) {
+		Serial.print("[ 0x");Serial.print(msgData[i],HEX);Serial.print(" ]");Serial.print('\t');
+	}
+}
 
 
 //  -----------  ECUname class  -----------
@@ -180,32 +345,6 @@ ECU::ECU(byte inECUInst)
 ECU::~ECU(void) {  }
 
 
-// Decoding the 29 bit CAN header.
-void ECU::readHeader(uint32_t CANID, msgHeader* inHeader) {
-  
-  uint32_t buffer = CANID;
-  
-  inHeader->sourceAddr	= buffer & 0xFF;
-  buffer						= buffer >> 8;
-  inHeader->PGN			= buffer & 0x3FFFF;
-  inHeader->PDUs			= buffer & 0xFF;
-  buffer						= buffer >> 8;
-  inHeader->PDUf			= buffer & 0xFF;
-  buffer						= buffer >> 8;
-  inHeader->DP				= buffer & 0x01;
-  buffer						= buffer >> 1;
-  inHeader->R				= buffer & 0x01;
-  buffer						= buffer >> 1;
-  inHeader->priority		= buffer &0x07;
-}
-
-
-uint32_t ECU::makeHeader(uint32_t PGN, uint8_t priority) {
-
-	return ((PGN << 8) | priority << 26) | getAddr();
-}
- 
-
 // First thing is to check for and handle incoming messages.
 // Next is to see if any CA's need to output messages of their own.
 void ECU::idle(void) {
@@ -219,19 +358,6 @@ void ECU::idle(void) {
 		trace = (CA*)trace->getNext();	// Grab the next one.
 	}
 }
-
-/*
- Addressing categories for CA's. Choose one.
-enum adderCat {
-
-	nonConfig,			// Address is hard coded.
-	serviceConfig,		// You can hook up equipment to change our address.
-	commandConfig,		// We can respond to address change messages.
-	selfConfig,			// We set our own depending on how the network is set up.
-	arbitraryConfig,	// We can do the arbitrary addressing dance.
-	noAddress			// We have no address, just a listener, or broadcaster.
-};
-*/
 
 
 // See how we deal with addressing.
@@ -268,13 +394,20 @@ void ECU::setDefAddr(byte inAddr) {
 
 
 // arbitraryConfig
-void ECU::requestForAddressClaim(void) {
-	
-	//uint32_t addr;
-	
-	//addr = ourECU->makeHeader(REQ_MESSAGE,6,address);
-	//sendMessage();
 
+// This sends the request to inAddr to send back their name. inAdder can be specific or
+// GLOBAL_ADDR to hit everyone.
+void ECU::requestForAddressClaim(byte inAddr) {
+	
+	message	ourMsg(3);
+	
+	ourMsg.setData(0,0);
+	ourMsg.setData(1,0xEE);
+	ourMsg.setData(2,0);
+	ourMsg.setSourceAddr(getAddr());
+	ourMsg.setPGN(REQ_MESSAGE);
+	ourMsg.setPDUs(inAddr);
+	sendMsg(&ourMsg);
 }
 
 
@@ -302,27 +435,24 @@ CA::CA(ECU* inECU)
 	
 	ourECU		= inECU;					// Pointer back to our "boss".
 	ourPGN		= 0;						// Default to zero.
-   dataBytes	= NULL;					// So we can use resizeBuff().
-   setNumBytes(DEF_NUM_DATA_BYTES);	// Set the default size.
+   numBytes		= DEF_NUM_BYTES;		// Set the default size.
    intervaTimer.reset();				// Default to off.
 }
 
 
-// Basically we recycle the buffer.
-CA::~CA(void) { resizeBuff(0,&dataBytes); }
+CA::~CA(void) { }
 
 
 int CA::getNumBytes(void) { return numBytes; }
 
 
-void CA::setNumBytes(int inNumBytes) {
+void CA::setNumBytes(int inNumBytes) { numBytes = inNumBytes; }
 
-	if (resizeBuff(inNumBytes,&dataBytes)) {
-      numBytes = inNumBytes;
-   } else {
-   	numBytes = 0;
-   }
-}
+
+void CA::handleMsg(message* inMsg) {  }
+
+
+void CA::sendMsg(void) {  }
 
 
 void CA::setSendInterval(float inMs) {
@@ -342,7 +472,7 @@ float CA::getSendInterval(void) {  return intervaTimer.getTime(); }
 void  CA::idleTime(void) {
 
    if (intervaTimer.ding()) {
-      sendMessage();
+      sendMsg();
       intervaTimer.stepTime();
    }
 }

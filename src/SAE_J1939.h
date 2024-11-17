@@ -12,14 +12,70 @@
 // PGN - Parameter Group Number. Basically what is this message about.
 
 
-#define GLOBAL_ADDR	255		// Destination only address. "Hey everyone!"
-#define NULL_ADDR		254		// Source address only. "Hey, listen! But, I have no address."
-#define REQ_MESSAGE	59904		// Request PGN. "Hey EVERYONE send out your name and address."
-#define ADDR_CLAIMED	60928		// Claimed PGN. "Hey EVERYONE this is my name and address." Or can't claim one.
+#define GLOBAL_ADDR		255		// Destination only address. "Hey everyone!"
+#define NULL_ADDR			254		// Source address only. "Hey, listen! But, I have no address."
+#define REQ_MESSAGE		59904		// Request PGN. "Hey EVERYONE send out your name and address."
+#define ADDR_CLAIMED		60928		// Claimed PGN. "Hey EVERYONE this is my name and address." Or can't claim one.
 
-#define DEF_NUM_DATA_BYTES 8
+#define DEF_NUM_BYTES	8
+#define DEF_PRIORITY		6
+#define DEF_R				true
+#define DEF_DP				false
+
+//				----- message -----
+
+// Decoding the 29 bit CAN/J1939 header.
+struct msgHeader {
+	uint32_t  PGN;				// Type of data (Parameter group number)
+	uint8_t   priority;		// CAN priority bits.
+	bool      R;				// Reserve bit.
+	bool      DP;				// Data page.
+	uint8_t   PDUf;			// PDU format
+	uint8_t   PDUs;			// PDU specific.
+	uint8_t   sourceAddr;	// Who sent this?
+};
 
 
+class message {
+
+	public:
+				message(int inNumBytes=DEF_NUM_BYTES);
+	virtual	~message(void);
+	
+				void		setNumBytes(int inNumBytes);
+				int		getNumBytes(void);	
+				void		setCANID(uint32_t CANID);
+				uint32_t	getCANID(void);	
+				void		setPGN(uint32_t PGN);
+				uint32_t	getPGN(void);
+				void		setPriority(byte inPriority);
+				byte		getPriority(void);
+				void		setR(bool inR);
+				bool		getR(void);
+				void		setDP(bool inDP);
+				bool		getDP(void);
+				void		setPDUf(byte inPDUf);
+				byte		getPDUf(void);
+				void		setPDUs(byte inPDUs);
+				byte		getPDUs(void);
+				void		setSourceAddr(byte inSourceAddr);
+				byte		getSourceAddr(void);
+				void		setData(int index,byte inByte);
+				byte		getData(int index);
+				void		showMessage(void);
+		
+	protected:
+				int		numBytes;	// Size of our data buffer.
+				byte*		msgData;		// The data buffer itself!
+				uint8_t	priority;	// CAN priority bits.
+				bool		R;				// Reserve bit.
+				bool		DP;			// Data page.
+				uint8_t	PDUf;			// PDU format
+				uint8_t	PDUs;			// PDU specific.
+				uint8_t	sourceAddr;	// Who sent this?
+};
+
+	
 
 //				----- ECU name -----
 
@@ -90,19 +146,6 @@ enum adderCat {
 };
 
 
-// Decoding the 29 bit CAN/J1939 header.
-struct msgHeader {
-	uint32_t  PGN;				// Type of data (Parameter group number)
-	uint8_t   priority;		// CAN priority bits.
-	bool      R;				// Reserve bit.
-	bool      DP;				// Data page.
-	uint8_t   PDUf;			// PDU format
-	uint8_t   PDUs;			// PDU specific.
-	uint8_t   sourceAddr;	// Who sent this?
-};
-
-
-
 class ECU :	public linkList,
 				public idler,
 				public ECUname {							
@@ -111,13 +154,11 @@ class ECU :	public linkList,
 				ECU(byte inECUInst=0);
 	virtual	~ECU(void);
 		
-				void     readHeader(uint32_t CANID, msgHeader* inHeader);
-				uint32_t	makeHeader(uint32_t PGN, uint8_t priority);
-	virtual  void		sendMessage(uint32_t PGN,byte priority,int numBytes,byte* data)=0;
+	virtual  void		sendMsg(message* outMsg)=0;
 	virtual  void		handlePacket(void)=0;
 	
-	void		setAddrCat(adderCat inAddrCat);		// How we deal with addressing.
-				adderCat	getAddrCat(void);				// See how we deal with addressing.
+				void		setAddrCat(adderCat inAddrCat);		// How we deal with addressing.
+							adderCat	getAddrCat(void);				// See how we deal with addressing.
 				
 				// serviceConfig
 				// commandConfig
@@ -128,7 +169,7 @@ class ECU :	public linkList,
 				void	setDefAddr(byte inAddr);
 				
 				// arbitraryConfig
-				void	requestForAddressClaim(void);
+				void	requestForAddressClaim(byte inAddr);
 				void	addressClaimed(void);
 				void	cannotClaimAddress(void);
 				void	commandedAddress(void);
@@ -154,19 +195,18 @@ class CA :	public linkListObj {
 				CA(ECU* inECU);
 				~CA(void);
 				
-				int	getNumBytes(void);				// These get and set the size of the
-            void	setNumBytes(int inNumBytes);	// Data buffer. Default is 8.
+				int	getNumBytes(void);				// These only set the value. No buffer here.
+            void	setNumBytes(int inNumBytes);	// The message class reads  and uses this.
+	virtual  void	handleMsg(message* inMsg);		// Both of these are stubs.
+	virtual  void	sendMsg(void);						// 
+				void	setSendInterval(float inMs);	// Used for broadcasting.
+            float	getSendInterval(void);			//
+	virtual	void	idleTime(void);					// Same as idle, but called by the ECU.
 				
-	virtual  void	sendMessage(void)=0;			
-				void	setSendInterval(float inMs);
-            float	getSendInterval(void);
-	virtual	void	idleTime(void);						// Same as idle, but called by the ECU.
-				
-				ECU*		ourECU;
-				uint32_t	ourPGN;
-            int		numBytes;
-            byte*		dataBytes;
-				timeObj	intervaTimer;
+				ECU*		ourECU;			// Pointer to our boss!
+				uint32_t	ourPGN;			// Used as our internal ID.
+            int		numBytes;		// How many bytes will the data buffer need?
+				timeObj	intervaTimer;	// If broadcasting, how often?
 };
 
 

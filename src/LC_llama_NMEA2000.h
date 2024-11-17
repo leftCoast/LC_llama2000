@@ -38,6 +38,7 @@ class CANMsgObj;
 
 
 class llama_NMEA2000 :   public ECU {
+
    public:
             llama_NMEA2000(byte inECUInst=0,int inResetPin=DEF_2515_RST_PIN,int inIntPin=DEF_2515_INT_PIN);
             ~llama_NMEA2000(void);
@@ -45,12 +46,10 @@ class llama_NMEA2000 :   public ECU {
             bool        begin(int inCSPin);
             bool        addMsgObj(uint32_t inPGN);
             CANMsgObj*  getMsgObj(uint32_t inPGN);
-	virtual  void			sendMessage(uint32_t PGN,byte priority,int numBytes,byte* data);
+	virtual  void			sendMsg(message* outMsg);
    virtual  void			handlePacket(void);
-   		  	void			showCANID(msgHeader CANID);
     
    protected:
-    
             int			resetPin;
             int			intPin;
             msgHeader	header;
@@ -69,9 +68,8 @@ class CANMsgObj : public CA {
 
             uint32_t getPGN(void);
             
-   virtual  void     handleMsg(void)=0;
-            void     showDataBytes(void);
-   virtual  void     sendMessage(void);
+   virtual  void	handleMsg(message* inMsg);
+   virtual  void	sendMsg(void);
             
             uint32_t	ourPGN;
 };
@@ -84,14 +82,12 @@ class CANMsgObj : public CA {
 class waterSpeedObj  : public CANMsgObj {
 
    public:
-          waterSpeedObj(ECU* inECU);
-          ~waterSpeedObj(void);
-          
+				waterSpeedObj(ECU* inECU);
+				~waterSpeedObj(void);
+
             float getSpeed(void);
-   virtual  void  sendMessage(void);
-   
-   protected:
-   virtual  void  handleMsg(void);
+   virtual  void  sendMsg(void);
+   virtual  void  handleMsg(message* inMsg);
              
           mapper  speedMap;
           float   knots;
@@ -105,14 +101,12 @@ class waterSpeedObj  : public CANMsgObj {
 class waterDepthObj  : public CANMsgObj {
 
    public:
-          waterDepthObj(ECU* inECU);
-          ~waterDepthObj(void);
+				waterDepthObj(ECU* inECU);
+				~waterDepthObj(void);
           
             float getDepth(void);
-   virtual  void  sendMessage(void);
-   
-   protected:
-  virtual   void  handleMsg(void);
+	virtual  void  sendMsg(void);
+	virtual	void  handleMsg(message* inMsg);
   
   
             float feet;
@@ -130,10 +124,8 @@ class waterTempObj  : public CANMsgObj {
             ~waterTempObj(void);
           
             float getTemp(void);
-   virtual  void  sendMessage(void);
-   
-   protected:
-   virtual  void  handleMsg(void);
+   virtual  void  sendMsg(void);
+   virtual  void  handleMsg(message* inMsg);
    
             float   degF;
 };
@@ -155,10 +147,8 @@ class fluidLevelObj  : public CANMsgObj {
             void     setLevel(float inLevel);
             float    getCapacity(void);
             void     setCapacity(float inCapacity);
-   virtual  void     sendMessage(void);
-          
-   protected:
-   virtual  void     handleMsg(void);
+   virtual  void     sendMsg(void);
+   virtual  void     handleMsg(message* inMsg);
    
             tankType fluidType;
             float    level;
