@@ -72,6 +72,7 @@ llama_NMEA2000::~llama_NMEA2000(void) {  }
 bool llama_NMEA2000::begin(int inCSPin) {
 
   hookup();
+  setupName();
   pinMode(resetPin, OUTPUT);
   delay(50);
   digitalWrite(resetPin, LOW);
@@ -79,6 +80,21 @@ bool llama_NMEA2000::begin(int inCSPin) {
   digitalWrite(resetPin, HIGH);
   return CAN.begin(500E3);
 }
+
+
+bool llama_NMEA2000::setupName(void) {
+		
+	setArbitratyAddrBit(false);		// False, we can't change our own address.
+	setIndGroup(Marine);					// What kind of machine are we ridin' on?
+	setSystemInst(0);						// 
+	setVehSys(DEV_CLASS_INST);					//																// One bit reserved field. Set to zero. 
+	setFunction(byte funct);				// 128+ need other fields for definition.
+	setFunctInst(byte functInst);			//
+	setECUInst(byte inst);					// 
+	setManufCode(uint16_t manufCode);	//
+	setID(uint32_t inID);
+}
+
 
 
 CANMsgObj* llama_NMEA2000::getMsgObj(uint32_t inPGN) {

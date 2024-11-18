@@ -80,6 +80,8 @@ class message {
 //				----- ECU name -----
 
 
+// Industry group. These fit an enum well.
+
 enum indGroup {
 
 	Global,
@@ -91,6 +93,147 @@ enum indGroup {
 };
 
 
+// deviceClass values. These values are NOT uniform. So, we'll do the #define thing.
+
+#define	DEV_CLASS_RES			0		// Reserved for 2000 Use
+#define	DEV_CLASS_SYS_TOOLS	10		// System tools
+#define	DEV_CLASS_SAFETY		20		// Safety systems
+#define	DEV_CLASS_NETWRK		25		// Internetwork device
+#define	DEV_CLASS_ELEC_DIST	30		// Electrical Distribution
+#define	DEV_CLASS_ELEC_GEN	35		// Electrical Generation
+#define	DEV_CLASS_CONTROL		40		// Steering and Control surfaces
+#define	DEV_CLASS_PROPEL		50		// Propulsion
+#define	DEV_CLASS_NAV			60		// Navigation
+#define	DEV_CLASS_COMS			70		// Communication
+#define	DEV_CLASS_SENSE_COM  75		// Sensor Communication Interface
+#define	DEV_CLASS_INST			80		// Instrumentation/general systems
+#define	DEV_CLASS_ENV_EXT		85		// External Environment
+#define	DEV_CLASS__ENV_INT	90		// Internal Environment
+#define	DEV_CLASS_DECK_EQP	100	// Deck + cargo + fishing equipment systems
+#define	DEV_CLASS_UI			110	// User Interface
+#define	DEV_CLASS_DISP			120	// Display
+#define	DEV_CLASS_ENT			125	// Entertainment
+
+
+// Device function.. OH lord! These are listed by.. deviceClass.
+
+//  DEV_CLASS_SYS_TOOLS
+#define	DEV_FUNC_DIAG			130	// Diagnostic.
+#define	DEV_FUNC_LOGGER		140	// Bus Traffic Logger.
+
+// DEV_CLASS_SAFETY
+#define	DEV_FUNC_ENC			110	// Alarm Enunciator.
+#define	DEV_FUNC_EPIRB			130	// Emergency Position Indicating Radio Beacon (EPIRB)
+#define	DEV_FUNC_OVERBOARD	135	// Man Overboard
+#define	DEV_FUNC_DATA_LOG		140	// Voyage Data Recorder
+#define	DEV_FUNC_CAMERA		150	// Camera
+
+// DEV_CLASS_NETWRK
+#define	DEV_FUNC_GATE			130	// PC Gateway
+#define	DEV_FUNC_NMEA_ALOG	131	// NMEA 2000 to Analog Gateway
+#define	DEV_FUNC_ALOG_NMEA	132	// Analog to NMEA 2000 Gateway
+#define	DEV_FUNC_NMEA_SER		133	// NMEA 2000 to Serial Gateway
+#define	DEV_FUNC_NMEA_0183	135	// NMEA 0183 Gateway
+#define	DEV_FUNC_NMEA_NET		136	// NMEA Network Gateway
+#define	DEV_FUNC_NMEA_LAN		137	// NMEA 2000 Wireless Gateway
+#define	DEV_FUNC_ROUTER		140	// Router
+#define	DEV_FUNC_BRIDGE		150	// Bridge
+#define	DEV_FUNC_REPEAT		160	// Repeater
+
+// DEV_CLASS_ELEC_DIST
+#define	DEV_FUNC_BINARY		130	// Binary Event Monitor
+#define	DEV_FUNC_LOAD_CONT	140	// Load Controller
+#define	DEV_FUNC_PWR_INP		141	// AC/DC Input
+#define	DEV_FUNC_CONTROL		150	// Function Controller
+
+// DEV_CLASS_ELEC_GEN
+#define	DEV_FUNC_ENGINE		140	// Engine
+#define	DEV_FUNC_ALT			141	// DC Generator/Alternator
+#define	DEV_FUNC_SOLAR			142	// Solar Panel (Solar Array)
+#define	DEV_FUNC_WIND			143	// Wind Generator (DC)
+#define	DEV_FUNC_AC_BUS		152	// AC Bus
+#define	DEV_FUNC_MAIN			153	// AC Mains (Utility/Shore)
+#define	DEV_FUNC_AC_OUT		154	// AC Output
+#define	DEV_FUNC_PC_CHRG		160	//Power Converter - Battery Charger
+#define	DEV_FUNC_PC_CHRG_INV	161	//Power Converter - Battery Charger+Inverter
+#define	DEV_FUNC_PC_INV		162	//Power Converter - Inverter
+#define	DEV_FUNC_PC_DC_DC		163	//Power Converter - DC
+#define	DEV_FUNC_BAT			170	// Battery
+#define	DEV_FUNC_ENG_GATE		180	// Engine Gateway
+
+// DEV_CLASS_CONTROL
+#define	DEV_FUNC_FOLLOW		130	// Follow-up Controller
+#define	DEV_FUNC_MODE			140	// Mode Controller
+#define	DEV_FUNC_AUTOPILOT	150	// Autopilot
+#define	DEV_FUNC_RUDDER		155	// Rudder
+#define	DEV_FUNC_HEADING		160	// Heading Sensors
+#define	DEV_FUNC_TRIM			170	//Trim (Tabs)/Interceptors
+#define	DEV_FUNC_PITCH_ROLL	180	//Attitude (Pitch, Roll, Yaw) Control
+
+/*
+50	130	Engineroom Monitoring
+50	140	Engine
+50	141	DC Generator/Alternator
+50	150	Engine Controller
+50	151	AC Generator
+50	155	Motor
+50	160	Engine Gateway
+50	165	Transmission
+50	170	Throttle/Shift Control
+50	180	Actuator
+50	190	Gauge Interface
+50	200	Gauge Large
+50	210	Gauge Small
+60	130	Bottom Depth
+60	135	Bottom Depth/Speed
+60	136	Bottom Depth/Speed/Temperature
+60	140	Ownship Attitude
+60	145	Ownship Position (GNSS)
+60	150	Ownship Position (Loran C)
+60	155	Speed
+60	160	Turn Rate Indicator
+60	170	Integrated Navigation
+60	175	Integrated Navigation System
+60	190	Navigation Management
+60	195	Automatic Identification System (AIS)
+60	200	Radar
+60	201	Infrared Imaging
+60	205	ECDIS
+60	210	ECS
+60	220	Direction Finder
+60	230	Voyage Status
+70	130	EPIRB
+70	140	AIS
+70	150	DSC
+70	160	Data Receiver/Transceiver
+70	170	Satellite
+70	180	Radio-telephone (MF/HF)
+70	190	Radiotelephone
+75	130	Temperature
+75	140	Pressure
+75	150	Fluid Level
+75	160	Flow
+75	170	Humidity
+80	130	Time/Date Systems
+80	140	VDR
+80	150	Integrated Instrumentation
+80	160	General Purpose Displays
+80	170	General Sensor Box
+80	180	Weather Instruments
+80	190	Transducer/General
+80	200	NMEA 0183 Converter
+85	130	Atmospheric
+85	160	Aquatic
+90	130	HVAC
+100	130	Scale (Catch)
+110	130	Button Interface
+110	135	Switch Interface
+110	140	Analog Interface
+120	130	Display
+120	140	Alarm Enunciator
+125	130	Multimedia Player
+125	140	Multimedia Controller
+*/
 
 // Packed eight byte set of goodies.
 class ECUname {
