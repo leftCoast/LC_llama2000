@@ -21,20 +21,32 @@ fluidLevel   // 0x1F211
 */
 
 
-enum tankType {
-   fuel,
-   water,
-   grayWater,
-   liveWell,
-   oil,
-   blackWater
-};
-
-
 class CANMsgObj;
 
 
 // ************ llama_NMEA2000 ************
+
+
+/*
+When you plug into the network, other devices will want to know what/who you are. These
+are the setting that tell your network network neighbors this information. What you see
+here is the default set put in place as an example. Change to match what you actually are
+by doing these calls in your program's setup() function before letting this thing start
+running.
+
+setID(0);								// Device ID. We make these up. You get 21 bits.
+setManufCode(0);						// This would be assigned to you by NMEA people.
+setECUInst(0);							// First ECU (Electronic control unit.)
+setFunctInst(0);						// First depth transducer.
+setFunction(DEV_FUNC_GP_TRANS);	// Depth transducer.
+											// Some spare bit here..
+setVehSys(DEV_CLASS_INST);			//	We are an instrument.
+setSystemInst(0);						// We are the first of our device class.
+setIndGroup(Marine);					// What kind of machine are we ridin' on?
+setArbitraryAddrBit(?);				// Will be set when we choose our addressing mode.
+
+
+*/
 
 
 class llama_NMEA2000 :   public ECU {
@@ -133,6 +145,15 @@ class waterTempObj  : public CANMsgObj {
 
 
 // ************* fluidLevelObj *************
+
+enum tankType {
+   fuel,
+   water,
+   grayWater,
+   liveWell,
+   oil,
+   blackWater
+};
 
 
 class fluidLevelObj  : public CANMsgObj {

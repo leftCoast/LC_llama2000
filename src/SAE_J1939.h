@@ -5,21 +5,28 @@
 #include <idlers.h>
 #include <timeObj.h>
 #include <resizeBuff.h>				// Need to objectify this to a base class. Then any chip should work.
+#include <cardIndex.h>	
+
 
 // CAN Header. This is all built on CAN Bus. Each message has a 39 bit header. Pared down
 // to 29 bits of info. Followed by 0..8 bytes data.
 // 
 // PGN - Parameter Group Number. Basically what is this message about.
-
+class ECUname;
 
 #define GLOBAL_ADDR		255		// Destination only address. "Hey everyone!"
 #define NULL_ADDR			254		// Source address only. "Hey, listen! But, I have no address."
 #define REQ_MESSAGE		59904		// Request PGN. "Hey EVERYONE send out your name and address."
 #define ADDR_CLAIMED		60928		// Claimed PGN. "Hey EVERYONE this is my name and address." Or can't claim one.
+#define COMMAND_ADDR		65240		// We were told to use this one.
+
+#define REQ_ADDR_CLAIM_PF	234	// PS = Destination addr.
+#define ADDR_CLAIMED_PF		238	// PS = 255. Works for both (ACK) & (NACK)
+#define COMMAND_ADDR_PF		254	// PS = 216. Giving PDU of COMMAND_ADDR above.
 
 #define DEF_NUM_BYTES	8
 #define DEF_PRIORITY		6
-#define DEF_R				true
+#define DEF_R				false
 #define DEF_DP				false
 
 //				----- message -----
@@ -60,10 +67,11 @@ class message {
 				byte		getPDUs(void);
 				void		setSourceAddr(byte inSourceAddr);
 				byte		getSourceAddr(void);
-				void		setData(int index,byte inByte);
-				byte		getData(int index);
+				void		setDataByte(int index,byte inByte);
+				byte		getDataByte(int index);
 				void		showMessage(void);
-		
+				bool		msgIsLessThanName(ECUname* inName);
+				
 	protected:
 				int		numBytes;	// Size of our data buffer.
 				byte*		msgData;		// The data buffer itself!
@@ -107,8 +115,8 @@ enum indGroup {
 #define	DEV_CLASS_COMS			70		// Communication
 #define	DEV_CLASS_SENSE_COM  75		// Sensor Communication Interface
 #define	DEV_CLASS_INST			80		// Instrumentation/general systems
-#define	DEV_CLASS_ENV_EXT		85		// External Environment
-#define	DEV_CLASS__ENV_INT	90		// Internal Environment
+#define	DEV_CLASS_EXT_ENV		85		// External Environment
+#define	DEV_CLASS_INT_ENV		90		// Internal Environment
 #define	DEV_CLASS_DECK_EQP	100	// Deck + cargo + fishing equipment systems
 #define	DEV_CLASS_UI			110	// User Interface
 #define	DEV_CLASS_DISP			120	// Display
@@ -170,70 +178,90 @@ enum indGroup {
 #define	DEV_FUNC_TRIM			170	//Trim (Tabs)/Interceptors
 #define	DEV_FUNC_PITCH_ROLL	180	//Attitude (Pitch, Roll, Yaw) Control
 
-/*
-50	130	Engineroom Monitoring
-50	140	Engine
-50	141	DC Generator/Alternator
-50	150	Engine Controller
-50	151	AC Generator
-50	155	Motor
-50	160	Engine Gateway
-50	165	Transmission
-50	170	Throttle/Shift Control
-50	180	Actuator
-50	190	Gauge Interface
-50	200	Gauge Large
-50	210	Gauge Small
-60	130	Bottom Depth
-60	135	Bottom Depth/Speed
-60	136	Bottom Depth/Speed/Temperature
-60	140	Ownship Attitude
-60	145	Ownship Position (GNSS)
-60	150	Ownship Position (Loran C)
-60	155	Speed
-60	160	Turn Rate Indicator
-60	170	Integrated Navigation
-60	175	Integrated Navigation System
-60	190	Navigation Management
-60	195	Automatic Identification System (AIS)
-60	200	Radar
-60	201	Infrared Imaging
-60	205	ECDIS
-60	210	ECS
-60	220	Direction Finder
-60	230	Voyage Status
-70	130	EPIRB
-70	140	AIS
-70	150	DSC
-70	160	Data Receiver/Transceiver
-70	170	Satellite
-70	180	Radio-telephone (MF/HF)
-70	190	Radiotelephone
-75	130	Temperature
-75	140	Pressure
-75	150	Fluid Level
-75	160	Flow
-75	170	Humidity
-80	130	Time/Date Systems
-80	140	VDR
-80	150	Integrated Instrumentation
-80	160	General Purpose Displays
-80	170	General Sensor Box
-80	180	Weather Instruments
-80	190	Transducer/General
-80	200	NMEA 0183 Converter
-85	130	Atmospheric
-85	160	Aquatic
-90	130	HVAC
-100	130	Scale (Catch)
-110	130	Button Interface
-110	135	Switch Interface
-110	140	Analog Interface
-120	130	Display
-120	140	Alarm Enunciator
-125	130	Multimedia Player
-125	140	Multimedia Controller
-*/
+// DEV_CLASS_PROPEL
+#define	DEV_FUNC_ENG_MON		30		// Engineroom Monitoring
+#define	DEV_FUNC_ENGINE		140	// Engine
+#define	DEV_FUNC_DC_ALT		141	// DC Generator/Alternator
+#define	DEV_FUNC_ENG_CONT		150	// Engine Controller
+#define	DEV_FUNC_AC_ALT		151	// AC Generator
+#define	DEV_FUNC_MOTOR			155	// Motor
+#define	DEV_FUNC_ENG_GATEWAY 160	// Engine Gateway
+#define	DEV_FUNC_TRANS			165	// Transmission
+#define	DEV_FUNC_THROTTLE		170	// Throttle/Shift Control
+#define	DEV_FUNC_ACT			180	// Actuator
+#define	DEV_FUNC_GAUGE			190	// Gauge Interface
+#define	DEV_FUNC_GAUGE_LRG	200	// Gauge Large
+#define	DEV_FUNC_GAUGE_SM		210	// Gauge Small
+
+// DEV_CLASS_NAV
+#define	DEV_FUNC_DEPTH			130	// Bottom Depth
+#define	DEV_FUNC_SP_DEPTH		135	// Bottom Depth/Speed
+#define	DEV_FUNC_SP_DP_TEMP	136	// Bottom Depth/Speed/Temperature
+#define	DEV_FUNC_ATTITUDE		140	// Ownship Attitude
+#define	DEV_FUNC_GNSS			145	// Ownship Position (GNSS)
+#define	DEV_FUNC_LORAN 		150	// Ownship Position (Loran C)
+#define	DEV_FUNC_SPEED			155	// Speed
+#define	DEV_FUNC_TURN_RATE	160	// Turn Rate Indicator
+#define	DEV_FUNC_NAV_A			170	// Integrated Navigation
+#define	DEV_FUNC_NAV_B			175	// Integrated Navigation System
+#define	DEV_FUNC_NAV_C			190	// Navigation Management
+#define	DEV_FUNC_AUTO_ID		195	// Automatic Identification System (AIS)
+#define	DEV_FUNC_RADAR			200	// Radar
+#define	DEV_FUNC_IR				201	// Infrared Imaging
+#define	DEV_FUNC_ECDIS			205	// ECDIS
+#define	DEV_FUNC_ECS			210	// ECS
+#define	DEV_FUNC_DIR			220	// Direction Finder
+#define	DEV_FUNC_V_STAT		230	// Voyage Status (What the hell does this mean?)
+
+// DEV_CLASS_COMS
+#define	DEV_FUNC_EPIRB			130	// EPIRB
+#define	DEV_FUNC_AIS			140	// AIS
+#define	DEV_FUNC_DSC			150	// DSC
+#define	DEV_FUNC_TRANSCIEVE	160	// Data Receiver/Transceiver
+#define	DEV_FUNC_SAT			170	// Satellite
+#define	DEV_FUNC_MF_HF			180	// Radio-telephone (MF/HF)
+#define	DEV_FUNC_PHONE			190	// Radiotelephone
+
+// DEV_CLASS_SENSE_COM
+#define	DEV_FUNC_TEMP			130	// Temperature
+#define	DEV_FUNC_PRESSURE		140	// Pressure
+#define	DEV_FUNC_LEVEL			150	// Fluid Level
+#define	DEV_FUNC_FLOW			160	// Flow
+#define	DEV_FUNC_HUMIDITY		170	// Humidity
+
+// DEV_CLASS_INST
+#define	DEV_FUNC_DATE_TIME	130	// Time/Date Systems
+#define	DEV_FUNC_VDR			140	// VDR
+#define	DEV_FUNC_INST			150	// Integrated Instrumentation
+#define	DEV_FUNC_GP_DISP		160	// General Purpose Displays
+#define	DEV_FUNC_GP_SENSE		170	// General Sensor Box
+#define	DEV_FUNC_WEATHER		180	// Weather Instruments
+#define	DEV_FUNC_GP_TRANS		190	// Transducer/General
+#define	DEV_FUNC_NMEA_CONV	200	// NMEA 0183 Converter
+
+// DEV_CLASS_EXT_ENV
+#define	DEV_FUNC_ENV_AIR		130	// Atmospheric
+#define	DEV_FUNC_ENV_WATER	160	// Aquatic
+
+// DEV_CLASS_INT_ENV
+#define	DEV_FUNC_HVAC			130	// HVAC
+
+// DEV_CLASS_DECK_EQP
+#define	DEV_FUNC_FISH_SCALE	130	// Scale (Catch)
+
+// DEV_CLASS_UI
+#define	DEV_FUNC_BTN			130	// Button Interface
+#define	DEV_FUNC_SWITCH		135	// Switch Interface
+#define	DEV_FUNC_ANALOG		140	// Analog Interface
+
+// DEV_CLASS_DISP
+#define	DEV_FUNC_DISP			130	// Display
+#define	DEV_FUNC_ALARM			40	// Alarm Enunciator
+
+// DEV_CLASS_ENT
+#define	DEV_FUNC_PLAYER		130	// Multimedia Player
+#define	DEV_FUNC_MEDIA_CONT	140	// Multimedia Controller
+
 
 // Packed eight byte set of goodies.
 class ECUname {
@@ -244,11 +272,12 @@ class ECUname {
 		
 		void		clearName(void);							// Want to zero our name out? This'll do it.
 		bool		sameName(ECUname* inName);				// We the same as that guy?
+		bool		isLessThanName(ECUname* inName);		// Are we less than that guy?
 		byte*		getName(void);								// 64 bit - Pass back the packed up 64 bits that this makes up as our name.
 		void		setName(byte* namePtr);					// Make this 64 bits our name.
 		
-		bool		getArbitratyAddrBit(void);				// 1 bit - True, we CAN change our address. 128..247
-		void		setArbitratyAddrBit(bool AABit);		// False, we can't change our own address.
+		bool		getArbitraryAddrBit(void);				// 1 bit - True, we CAN change our address. 128..247
+		void		setArbitraryAddrBit(bool AABit);		// False, we can't change our own address.
 		indGroup	getIndGroup(void);						// 3 bit - Assigned by committee. Tractor, car, boat..
 		void		setIndGroup(indGroup inGroup);
 		byte		getSystemInst(void);						// 4 bit - System instance, like engine1 or engine2.
@@ -267,9 +296,10 @@ class ECUname {
 		uint32_t	getID(void);								// 21 bit - Unique Fixed value. Product ID & Serial number kinda' thing.
 		void		setID(uint32_t inID);
 		
+		void		showName(void);							// Human readable printout.
 	protected:
 		
-		byte			name[8];									// The stored 8 byte. 64 bit name.
+		byte		name[8];										// The stored 8 byte. 64 bit name.
 };
 
 
@@ -278,14 +308,24 @@ class ECUname {
 
 
 // Addressing categories for ECU's. Choose one.
-enum adderCat {
+enum addrCat {
 
 	nonConfig,			// Address is hard coded.
-	serviceConfig,		// You can hook up equipment to change our address.
+	serviceConfig,		// You can hook up.. Something. To change our address.
 	commandConfig,		// We can respond to address change messages.
 	selfConfig,			// We set our own depending on how the network is set up.
 	arbitraryConfig,	// We can do the arbitrary addressing dance.
 	noAddress			// We have no address, just a listener, or broadcaster.
+};
+
+
+// What in the world is going on in there? The "ourState" variable can give a hint.
+enum		ECUState {
+	
+	config,				// Still on the bench being assembled.
+	arbit,				// Doing address arbitration.
+	addrErr,				// Had an address error that we can't fix alone.
+	running				// Everything seems fine. We're running.
 };
 
 
@@ -294,35 +334,36 @@ class ECU :	public linkList,
 				public ECUname {							
 
 	public:
-				ECU(byte inECUInst=0);
+				ECU(void);
 	virtual	~ECU(void);
 		
-	virtual  void		sendMsg(message* outMsg)=0;
-	virtual  void		handlePacket(void)=0;
-	
-				void		setAddrCat(adderCat inAddrCat);		// How we deal with addressing.
-							adderCat	getAddrCat(void);				// See how we deal with addressing.
+	virtual	void		begin(ECUname* inName,byte initialAddr,addrCat inAddCat);
+				void		setState(ECUState newState);
 				
+	virtual  void		sendMsg(message* outMsg)=0;
+	virtual	void		recieveMsg(message* inMsg)=0;
+	virtual  void		handleMsg(message* inMsg);
+	
+				void		setAddrCat(addrCat inAddrCat);		// How we deal with addressing.
+				addrCat	getAddrCat(void);							// See how we deal with addressing.
+				
+				// nonConfig
 				// serviceConfig
 				// commandConfig
 				// selfConfig
-				byte	getAddr(void);
-				void	setAddr(byte inAddr);
-				byte	getDefAddr(void);
-				void	setDefAddr(byte inAddr);
+				byte		getAddr(void);
+				void		setAddr(byte inAddr);
 				
 				// arbitraryConfig
-				void	requestForAddressClaim(byte inAddr);
-				void	addressClaimed(void);
-				void	cannotClaimAddress(void);
-				void	commandedAddress(void);
+				void		requestForAddressClaim(byte inAddr=GLOBAL_ADDR);	// Default to broadcast to all.
+				void		addressClaimed(bool tryFail=true);						// Default to "try".
+				void		cannotClaimAddress(void);									// Calls above with "fail".
+				void		commandedAddress(byte comAddr);							// Uses current address to send new address.
 				
 	virtual	void		idle(void);
-	
-				enum	ECUState { preStart, claiming, working };
 				
-				adderCat	ourAddrCat;
-				byte		defAddr;
+				ECUState	ourState;
+				addrCat	ourAddrCat;
 				byte		addr;	
 };
 
@@ -347,9 +388,9 @@ class CA :	public linkListObj {
 	virtual	void	idleTime(void);					// Same as idle, but called by the ECU.
 				
 				ECU*		ourECU;			// Pointer to our boss!
-				uint32_t	ourPGN;			// Used as our internal ID.
+				uint32_t	ourPGN;			// Typically, this is the type of info we understand.
             int		numBytes;		// How many bytes will the data buffer need?
-				timeObj	intervaTimer;	// If broadcasting, how often?
+				timeObj	intervaTimer;	// If broadcasting, how often do we broadcast? (Ms)
 };
 
 
