@@ -5,7 +5,6 @@
 #include <idlers.h>
 #include <timeObj.h>
 #include <resizeBuff.h>				// Need to objectify this to a base class. Then any chip should work.
-#include <cardIndex.h>	
 
 
 // CAN Header. This is all built on CAN Bus. Each message has a 39 bit header. Pared down
@@ -275,6 +274,7 @@ class ECUname {
 		bool		isLessThanName(ECUname* inName);		// Are we less than that guy?
 		byte*		getName(void);								// 64 bit - Pass back the packed up 64 bits that this makes up as our name.
 		void		setName(byte* namePtr);					// Make this 64 bits our name.
+		void		copyName(ECUname* namePtr);			// Make us a clone of that.
 		
 		bool		getArbitraryAddrBit(void);				// 1 bit - True, we CAN change our address. 128..247
 		void		setArbitraryAddrBit(bool AABit);		// False, we can't change our own address.
@@ -304,7 +304,36 @@ class ECUname {
 
 
 
+//				-----    addrList   &  addrNode    -----
+
+
+class addrNode :	public linkListObj {
+
+public:
+				addrNode(byte inAddr);
+	virtual	~addrNode(void);
+	
+	virtual	bool	isGreaterThan(linkListObj* compObj);	// Are we greater than the obj being passed in?
+	virtual	bool	isLessThan(linkListObj* compObj);		// Are we less than the obj being passed in?
+	
+				byte	addr;
+};
+
+
+
+class addrList :	public linkList {
+
+public:
+				addrList(void);
+	virtual	~addrList(void);
+	
+	virtual	void addAddr(byte inAddr);
+};
+
+
+
 //				----- ECU Electronic control unit. -----
+
 
 
 // Addressing categories for ECU's. Choose one.
@@ -337,34 +366,36 @@ class ECU :	public linkList,
 				ECU(void);
 	virtual	~ECU(void);
 		
-	virtual	void		begin(ECUname* inName,byte initialAddr,addrCat inAddCat);
-				void		setState(ECUState newState);
-				
-	virtual  void		sendMsg(message* outMsg)=0;
-	virtual	void		recieveMsg(message* inMsg)=0;
-	virtual  void		handleMsg(message* inMsg);
-	
-				void		setAddrCat(addrCat inAddrCat);		// How we deal with addressing.
-				addrCat	getAddrCat(void);							// See how we deal with addressing.
-				
-				// nonConfig
-				// serviceConfig
-				// commandConfig
-				// selfConfig
-				byte		getAddr(void);
-				void		setAddr(byte inAddr);
+	virtual	void		begin(ECUname* inName,byte inAddr,addrCat inAddCat);	// Initial setup.
+				void		changeState(ECUState newState);				// Keeping track of what we are up to.
+	virtual  void		sendMsg(message* outMsg)=0;					// You have to fill this one out.
+	virtual  void		handleMsg(message* inMsg);						// When a message comes in, pass it into here.
+				bool		isReqAddrClaim(message* inMsg);				// Is this a request for address claimed msg?
+				bool		isAddrClaim(message* inMsg);					// Is this an address claimed msg?
+				bool		isCantClaim(message* inMsg);					// Is this a fail to claim address msg?
+				bool		isCommandedAddr(message* inMsg);				// Is this a commanded address msg?
+				void		handleReqAdderClaim(message* inMsg);		// Handle a request for address claimed msg.
+				void		handleAdderClaim(message* inMsg);			// Handle an address claimed msg.
+				void		handleCantClaim(message* inMsg);				// Handle a failed to claim an address msg.				
+				void		handleComAddr(message* inMsg);				// Handle a commanded address message.
+				void		setupAddrList(void);								// Clear out our address list for incoming claimed addresses.
+				void		setAddrCat(addrCat inAddrCat);				// How we deal with addressing.
+				addrCat	getAddrCat(void);									// See how we deal with addressing.
+				byte		getAddr(void);										// Here's our current address.
+				void		setAddr(byte inAddr);							// Set a new address.
 				
 				// arbitraryConfig
-				void		requestForAddressClaim(byte inAddr=GLOBAL_ADDR);	// Default to broadcast to all.
-				void		addressClaimed(bool tryFail=true);						// Default to "try".
-				void		cannotClaimAddress(void);									// Calls above with "fail".
-				void		commandedAddress(byte comAddr);							// Uses current address to send new address.
-				
+				void		sendRequestForAddressClaim(byte inAddr);	// Tell us your name and address.
+				void		sendAddressClaimed(bool tryFail=true);		// This is our name and address.
+				void		sendCannotClaimAddress(void);					// We can't find an address!
+				void		sendCommandedAddress(byte comAddr);			// HEY YOU! Set this as your address!
+
 	virtual	void		idle(void);
 				
 				ECUState	ourState;
 				addrCat	ourAddrCat;
-				byte		addr;	
+				byte		addr;
+				addrList	ourAddrList;
 };
 
 
@@ -381,7 +412,7 @@ class CA :	public linkListObj {
 				
 				int	getNumBytes(void);				// These only set the value. No buffer here.
             void	setNumBytes(int inNumBytes);	// The message class reads  and uses this.
-	virtual  void	handleMsg(message* inMsg);		// Both of these are stubs.
+	virtual  bool	handleMsg(message* inMsg);		// Both of these are stubs.
 	virtual  void	sendMsg(void);						// 
 				void	setSendInterval(float inMs);	// Used for broadcasting.
             float	getSendInterval(void);			//

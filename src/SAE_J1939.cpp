@@ -200,7 +200,7 @@ ECUname::~ECUname(void) {  }
 // Just in case you need to clear it out.
 void ECUname::clearName(void) {
 
-	for(int i=0;i<7;i++) {
+	for(int i=0;i<8;i++) {
 		name[i] = 0;
 	}
 }
@@ -209,7 +209,7 @@ void ECUname::clearName(void) {
 // We the same as that guy?
 bool ECUname::sameName(ECUname* inName) {
 	
-	for(int i=0;i<7;i++) {
+	for(int i=0;i<8;i++) {
 		if (name[i] != inName->name[i]) return false;
 	}
 	return true;
@@ -229,7 +229,7 @@ bool ECUname::isLessThanName(ECUname* inName) {
 				
 // 64 bit - Pass back ta copy of the 64 bits that this makes up as our name.
 byte* ECUname::getName(void) {						
-	for (int i=0;i<7;i++) {
+	for (int i=0;i<8;i++) {
 		nameBuff[i] = name[i];
 	}
 	return nameBuff;
@@ -239,8 +239,17 @@ byte* ECUname::getName(void) {
 // If we want to decode one?
 void ECUname::setName(byte* namePtr) {
 	
-	for (int i=0;i<7;i++) {
+	for (int i=0;i<8;i++) {
 		name[i] = namePtr[i];
+	}
+}
+
+
+// We want to be a copy of this one? Ok..
+void ECUname::copyName(ECUname* inName) {
+
+	if (inName) {
+		setName(inName->getName());
 	}
 }
 
@@ -396,6 +405,42 @@ void ECUname::showName(void) {
 
 
 
+//				-----    addrList   &  addrNode    -----
+
+
+addrNode::addrNode(byte inAddr) 
+	: linkListObj()
+	{ addr = inAddr; }
+
+
+addrNode::~addrNode(void) {  }
+
+
+// Are we greater than the obj being passed in?	
+bool addrNode::isGreaterThan(linkListObj* compObj) { return ((addrNode*)compObj)->addr>addr; }
+
+
+// Are we less than the obj being passed in?	
+bool addrNode::isLessThan(linkListObj* compObj) { return ((addrNode*)compObj)->addr<addr; }
+
+
+
+// Create a new address list.
+addrList::addrList(void) : linkList() {  }
+
+// Recycle an address list.
+addrList::~addrList(void) {  }
+
+// Add an address into our list.	
+void addrList::addAddr(byte inAddr) {
+
+	addrNode* newNode;
+	
+	newNode = new addrNode(inAddr);
+	if (newNode) addToTop(newNode);
+}
+
+
 
 //				----- ECU Electronic control unit. -----
 
@@ -420,7 +465,7 @@ void ECU::begin(ECUname* inName,byte inAddr,addrCat inAddCat) {
 }
 
 
-void ECU::setState(ECUState newState) {
+void ECU::changeState(ECUState newState) {
 
 	switch(ourState) {
 		case config		:
@@ -429,12 +474,12 @@ void ECU::setState(ECUState newState) {
 																	// Whatever.
 				break;	
 				case arbit		:
-					ourState = preStart;						// No, you go here first.
+					ourState = arbit;							// OK
 				break;
 				case addrErr	:
 					ourState = addrErr;						// Can't see how, but. Whatever.
 				case running	:
-					ourState = preStart;						// No, you go here first.
+					ourState = running;						// OK
 				break;
 			}
 		break;
@@ -452,7 +497,6 @@ void ECU::setState(ECUState newState) {
 					ourState = running;						// Ok, we're running.
 				break;
 			}
-		}
 		case running	:
 			switch(newState) {
 				case config		:
@@ -500,10 +544,10 @@ void ECU::handleMsg(message* inMsg) {
 		trace = (CA*)getFirst();
 		while(!done) {
 			if (trace) {
-				if (trace->handleMsg(inMsg) {
+				if (trace->handleMsg(inMsg)) {
 					done = true;
 				} else {
-					trace = (CA*)trace->next();
+					trace = (CA*)trace->getNext();
 				}
 			} else {
 				done = true;
@@ -515,10 +559,10 @@ void ECU::handleMsg(message* inMsg) {
 
 // Request address claimed. Someone is asking for everyone, or you to show who you are
 // and what address you are holding at this moment.
-bool ECU::isReqAddrClaim(inMsg) {
+bool ECU::isReqAddrClaim(message* inMsg) {
 
-	if (inMsg->PGN==REQ_MESSAGE && inMsg->getNumBytes()==3) return true;
-	if (inMsg->PDUf==REQ_ADDR_CLAIM_PF && inMsg->R==0 && inMsg->DP==0 && inMsg->getNumBytes()==3) return true;
+	if (inMsg->getPGN()==REQ_MESSAGE && inMsg->getNumBytes()==3) return true;
+	if (inMsg->getPDUf()==REQ_ADDR_CLAIM_PF && inMsg->getR()==0 && inMsg->getDP()==0 && inMsg->getNumBytes()==3) return true;
 	return false;
 	
 }
@@ -526,41 +570,41 @@ bool ECU::isReqAddrClaim(inMsg) {
 
 // Address Claimed. Someone is telling the world that this is the address they are going
 // to use. If this conflicts with yours? Deal with that.
-bool ECU::isAddrClaim(inMsg) {
+bool ECU::isAddrClaim(message* inMsg) {
 	
-	if (inMsg->PGN==ADDR_CLAIMED && inMsg->sourceAddr==GLOBAL_ADDR && inMsg->getNumBytes()==8) return true;
+	if (inMsg->getPGN()==ADDR_CLAIMED && inMsg->getSourceAddr()==GLOBAL_ADDR && inMsg->getNumBytes()==8) return true;
 	return false;
 }
 
 // Someone is telling the network that they can not claim an address at all.
-bool ECU::isCantClaim(inMsg) {
+bool ECU::isCantClaim(message* inMsg) {
 	
-	if (inMsg->PGN==ADDR_CLAIMED && inMsg->sourceAddr==NULL_ADDR && inMsg->getNumBytes()==8) return true;
+	if (inMsg->getPGN()==ADDR_CLAIMED && inMsg->getSourceAddr()==NULL_ADDR && inMsg->getNumBytes()==8) return true;
 	return false;
 }
 
 
 // Someone is telling somebody to change their address to a given new value. (The 9th byte)
-bool ECU::isCommandedAddr(inMsg) {
+bool ECU::isCommandedAddr(message* inMsg) {
 	
-	if (inMsg->PGN==COMMAND_ADDR && inMsg->getNumBytes()==9) return true;
+	if (inMsg->getPGN()==COMMAND_ADDR && inMsg->getNumBytes()==9) return true;
 	return false;
 }
 
 
 // We have a new message asking us or everyone what address we are and what our name is.
-void ECU::handleReqAdderClaim(inMsg) {
+void ECU::handleReqAdderClaim(message* inMsg) {
 	
 	switch(ourState) {
-		case arbit		:														// Arbitrating
-		case running	:														// Or running..
-			if (inMsg->PDUs==GLOBAL_ADDR || inMsg->PDUs==addr) {	// If sent to everyone or just us..
-				sendAddressClaimed(true);									// We send our address & name.
+		case arbit		:																		// Arbitrating
+		case running	:																		// Or running..
+			if (inMsg->getPDUs()==GLOBAL_ADDR || inMsg->getPDUs()==addr) {		// If sent to everyone or just us..
+				sendAddressClaimed(true);													// We send our address & name.
 			}
 		break;
-		case addrErr	:														// We failed to get an address.
-			if (inMsg->PDUs==GLOBAL_ADDR || inMsg->PDUs==addr) {	// If sent to everyone or just us..
-				sendCannotClaimAddress();									// We send null address & name.
+		case addrErr	:																		// We failed to get an address.
+			if (inMsg->getPDUs()==GLOBAL_ADDR || inMsg->getPDUs()==addr) {		// If sent to everyone or just us..
+				sendCannotClaimAddress();													// We send null address & name.
 			}
 		break;
 		default : break;
@@ -570,12 +614,12 @@ void ECU::handleReqAdderClaim(inMsg) {
 
 // We have a message telling us that someone claimed an address. Let's see if it's our
 // address they claimed. If so? We can send back and address claimed?
-void ECU::handleAdderClaim(inMsg) {
+void ECU::handleAdderClaim(message* inMsg) {
 	
 	switch(ourState) {
 		case arbit		:														// Arbitrating. (We can arbitrate then!)
-			if (inMsg->sourceAddr==addr) {								// Claiming our address!?
-				if (inMsg->isLessThanName(this)) {						// If they win the arbitration..
+			if (inMsg->getSourceAddr()==addr) {							// Claiming our address!?
+				if (inMsg->msgIsLessThanName(this)) {					// If they win the arbitration..
 					addr = NULL_ADDR;											// We give up the address.
 				} else {															// Else, we win the name fight.
 					sendAddressClaimed();									// Rub in face!
@@ -583,14 +627,14 @@ void ECU::handleAdderClaim(inMsg) {
 			}																		//
 		break;
 		case running	:														// Running.											
-			if (inMsg->sourceAddr==addr) {								// Claiming our address!?
-				if (inMsg->isLessThanName(this)) {						// If they win the arbitration..
+			if (inMsg->getSourceAddr()==addr) {							// Claiming our address!?
+				if (inMsg->msgIsLessThanName(this)) {					// If they win the arbitration..
 					addr = NULL_ADDR;											// We give up the address.
 					if (ourAddrCat==arbitraryConfig) {					// If we do we do arbitration..
-						setState(arbit);										// We go back to arbitration.
+						changeState(arbit);									// We go back to arbitration.
 					} else {
 						sendCannotClaimAddress();							// We send we are stuck;
-						setState(addrErr);									// We go to address error state.
+						changeState(addrErr);								// We go to address error state.
 					}																//
 				} else {															// Else WE WON the name game!
 					sendAddressClaimed();									// Rub in face!
@@ -602,13 +646,15 @@ void ECU::handleAdderClaim(inMsg) {
 }
 
 
-// We have a message telling someone or all that they can not claim an address. I don't
+// We have a message telling someone, or all, that they can not claim an address. I don't
 // have any response to this. "Gee too bad"? For now I guess it's handled. 
-void ECU::handleCantClaim(inMsg) { }
+void ECU::handleCantClaim(message* inMsg) { }
 
 
 
-void ECU::handleComAddr(inMsg) {
+// There is a command that sends ECU's new addresses to switch to. We deal with these
+// here.
+void ECU::handleComAddr(message* inMsg) {
 
 	if (ourAddrCat==commandConfig) {				// Only commandConfig addressing can do this.
 		switch(ourState) {							// If our state is..
@@ -619,14 +665,14 @@ void ECU::handleComAddr(inMsg) {
 				addr = inMsg->getDataByte(8);		// Grab the address and plug it in.
 				sendAddressClaimed();				// Tell the neighborhood.
 			break;										// And we're done.
+			default			: break;					// Else we just ignore it. They are crazy. Or power hungry.
 		}
 	}
 }
 
 
-void setupAddrTable(void) {
-	
-}
+void  ECU::setupAddrList(void) { ourAddrList.dumpList(); }
+
 
 // See how we deal with addressing.
 addrCat ECU::getAddrCat(void) { return ourAddrCat; }
@@ -646,23 +692,8 @@ void ECU::setAddrCat(addrCat inAddrCat) {
 byte ECU::getAddr(void) { return addr; }
 
 
-void ECU::setAddr(byte inAddr) {
-
-	addr		= inAddr;	// Fine, our address is now inAddr.
-	defAddr	= addr;		// And defAddr always tracks last addr.
-}
-	
-
-byte ECU::getDefAddr(void) { return defAddr; }
-
-
-void ECU::setDefAddr(byte inAddr) {
-
-	defAddr = inAddr;				// Set the default address.
-	if (ourState==config) {		// If we're in config state..
-		addr = inAddr;				// We set our working address as well.
-	}
-}
+// Fine, our address is now inAddr.
+void ECU::setAddr(byte inAddr) { addr		= inAddr; }
 
 
 // arbitraryConfig
@@ -673,6 +704,7 @@ void ECU::sendRequestForAddressClaim(byte inAddr) {
 	
 	message	ourMsg(3);						// Create a message with 3 byte data buffer.
 	
+	setupAddrList();							// We ask for info, clear a place to store it.
 	ourMsg.setDataByte(0,0);				// Byte zero, gets zero.
 	ourMsg.setDataByte(1,0xEE);			// Byte one, gets 0xEE.
 	ourMsg.setDataByte(2,0);				// Byte 2 gets zero. These three are saying "Send your name!"
@@ -703,7 +735,7 @@ void ECU::sendAddressClaimed(bool tryFail) {
 }
 
 
-void ECU::sendCannotClaimAddress(void) { addressClaimed(false); }
+void ECU::sendCannotClaimAddress(void) { sendAddressClaimed(false); }
 
 
 void ECU::sendCommandedAddress(byte comAddr) {
@@ -722,14 +754,13 @@ void ECU::sendCommandedAddress(byte comAddr) {
 }
 
 		
-// First thing is to check for and handle incoming messages.
-// Next is to see if any CA's need to output messages of their own.
+// See if any CA's need to output messages of their own. Or other chores we know nothing
+// about.
 void ECU::idle(void) {
 
 	CA*			trace;
 
-	handlePacket();								// If polling, and that's what's up now. We see if a message has arrived.
-	if (running) {									// If we're in running state? We'll run the CAs.
+	if (ourState==running) {					// If we're in running state? We'll run the CAs.
 		trace = (CA*)getFirst();				// Well start at the beginning and let 'em all have a go.
 		while(trace) {								// While we got something..
 			trace->idleTime();					// Give 'em some time to do things.
@@ -762,7 +793,7 @@ int CA::getNumBytes(void) { return numBytes; }
 void CA::setNumBytes(int inNumBytes) { numBytes = inNumBytes; }
 
 
-void CA::handleMsg(message* inMsg) {  }
+bool CA::handleMsg(message* inMsg) { return false; }
 
 
 void CA::sendMsg(void) {  }
