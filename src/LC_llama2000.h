@@ -45,7 +45,6 @@ setSystemInst(0);						// We are the first of our device class.
 setIndGroup(Marine);					// What kind of machine are we ridin' on?
 setArbitraryAddrBit(?);				// Will be set when we choose our addressing mode.
 
-
 */
 
 

@@ -174,7 +174,81 @@ void message::showMessage(void) {
 }
 
 
+
+//				-----            BAMmsg            -----
+
+
+// [32] [Size LSB] [Size MSB] [numPacks] [0xFF] [PGN LSB] [PGN2] [PGN MSB]
+
+// I hope I did this right.
+
+
+BAMmsg::BAMmsg(void) {  }
+
+BAMmsg::BAMmsg(message* inBAMMsg) {  
+
+	if (getPDUf()==BAM_PF && getNumBytes()==8) {
+		setCANID(inBAMMsg->getCANID());
+		for(int i=0;i<8;i++) {
+			msgData[i] = inBAMMsg->getDataByte(i);
+		}
+	}	
+}
+
+
+BAMmsg::~BAMmsg(void){  }
+	
+	
+void BAMmsg::setupBAM(byte destAddr,int numBytes,byte numPacks,uint32_t PGN) {
+	
+	setPGN(BAM_COMMAND);
+	setPDUs(destAddr);
+	msgData[0] = 32;						// As per doc.
+	msgData[1] = numBytes & 0xFF;		// Byte one LSB
+	numBytes = numBytes >> 8;			// Scroll off the LSB.
+	msgData[2] = numBytes & 0xFF;		// Leaving MSB for byte 2.
+	msgData[3] = numPacks;				// Byte 3 is just a byte.
+	msgData[4] = 0xFF;					// As per doc.
+	msgData[5] = PGN & 0xFF;			// Byte 5, LSB
+	PGN = PGN >> 8;						// Clock it over.
+	msgData[6] = PGN & 0xFF;			// Byte 6, Medium SB?
+	PGN = PGN >> 8;						// Clock it over.
+	msgData[7] = PGN & 0xFF;			// Byte 7, MSB. And we're done?
+}
+
+
+int BAMmsg::getBAMNumBytes(void) {
+
+	int	numBytes;
+	
+	numBytes = 0;
+	numBytes = numBytes |  msgData[2];
+	numBytes = numBytes << 8;
+	numBytes = numBytes |  msgData[1];
+	return numBytes;
+}
+
+
+byte BAMmsg::getBAMNumPacks(void) { return msgData[3]; }
+
+
+uint32_t BAMmsg::getBAMPGN(void) {
+
+	uint32_t PGN;
+    
+	PGN = 0;
+	PGN = PGN | msgData[7];
+	PGN = PGN << 8;
+	PGN = PGN | msgData[6];
+	PGN = PGN << 8;
+	PGN = PGN | msgData[5];
+	return PGN;
+}
+
+
+
 //  -----------  ECUname class  -----------
+
 
 byte nameBuff[8];		// Global name buffer for when people want to grab the 8 bytes from the ECUname class.
 

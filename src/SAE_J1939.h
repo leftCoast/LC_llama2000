@@ -18,10 +18,13 @@ class ECUname;
 #define REQ_MESSAGE		59904		// Request PGN. "Hey EVERYONE send out your name and address."
 #define ADDR_CLAIMED		60928		// Claimed PGN. "Hey EVERYONE this is my name and address." Or can't claim one.
 #define COMMAND_ADDR		65240		// We were told to use this one.
+#define BAM_COMMAND		60416		// Big load coming! Make room!
 
 #define REQ_ADDR_CLAIM_PF	234	// PS = Destination addr.
+#define BAM_PF					236	// PS = 255 or Destination addr.
 #define ADDR_CLAIMED_PF		238	// PS = 255. Works for both (ACK) & (NACK)
-#define COMMAND_ADDR_PF		254	// PS = 216. Giving PDU of COMMAND_ADDR above.
+#define COMMAND_ADDR_PF		254	// PS = 216. Giving PGN of COMMAND_ADDR above.
+
 
 #define DEF_NUM_BYTES	8
 #define DEF_PRIORITY		6
@@ -82,8 +85,27 @@ class message {
 				uint8_t	sourceAddr;	// Who sent this?
 };
 
-	
 
+
+//				-----            BAMmsg            -----
+
+// [32] [Size LSB] [Size MSB] [numPacks] [0xFF] [PGN LSB] [PGN2] [PGN MSB]
+
+class BAMmsg :	public message {
+
+	public:
+				BAMmsg(void);
+				BAMmsg(message* inBAMMsg);
+	virtual	~BAMmsg(void);
+	
+				void		setupBAM(byte destAddr,int numBytes,byte numPacks,uint32_t PGN);
+				int		getBAMNumBytes(void);
+				byte		getBAMNumPacks(void);
+				uint32_t	getBAMPGN(void);
+};
+
+
+	
 //				----- ECU name -----
 
 
@@ -309,7 +331,7 @@ class ECUname {
 
 class addrNode :	public linkListObj {
 
-public:
+	public:
 				addrNode(byte inAddr);
 	virtual	~addrNode(void);
 	
