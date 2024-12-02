@@ -505,13 +505,116 @@ addrList::addrList(void) : linkList() {  }
 // Recycle an address list.
 addrList::~addrList(void) {  }
 
-// Add an address into our list.	
+
+// Return a pointer to this node if we can find it.
+addrNode* addrList::findAddr(byte inAddr) {
+
+	addrNode*	trace;
+	
+	trace = (addrNode*) getFirst();
+	while(trace) {
+		if (trace->addr==inAddr) return trace;
+		trace = (addrNode*) trace->getNext();
+	}
+	return trace;
+}
+
+
+// Add an address into our list.	IF it's not already there.
 void addrList::addAddr(byte inAddr) {
 
 	addrNode* newNode;
 	
-	newNode = new addrNode(inAddr);
-	if (newNode) addToTop(newNode);
+	if (!findAddr(inAddr)) {
+		newNode = new addrNode(inAddr);
+		if (newNode) addToTop(newNode);
+	}
+}
+
+
+
+//				-----    xferList   &  xferNode    -----
+
+
+// As this is currently written, once we receive a BAM message, we own it. We will delete
+// it when we are done with it.
+xferNode::xferNode(BAMmsg* inMsg,bool inRecieve)
+	: linkListObj() {
+	
+	msg = inMsg;
+	recieve = inRecieve;
+	buff = NULL;
+	numBytes = 0;
+	complete = true;
+	if (msg) {
+		if (resizeBuff(msg->getBAMNumBytes(),&buff)) {
+			numBytes = msg->getBAMNumBytes();
+			complete = false;
+		}
+	}
+}
+	
+
+// Here is where we delete the BAM message. Just so you know.	
+xferNode::~xferNode(void) {
+
+	resizeBuff(0,&buff);			// Recycle our buffer.
+	if (msg) delete(msg);		// Recycle the BAM message.
+}
+
+
+// If we have things we need to do at certain times? They happend here.
+void xferNode::idleTime(void) {
+
+
+}
+	
+
+
+
+xferList::xferList(void)
+	: linkList(), idler() {  }
+	
+	
+xferList::~xferList(void) {  }
+
+
+// Either we create an outgoing BAM message or we receive in incoming BAM message. Toss it
+// in here.
+void xferList::addXfer(BAMmsg* inMsg,bool inRecieve) {  }
+
+
+// Basic garbage collection. Any transfer message nodes completed get marked as complete
+// and need to be recycled. Actually we only need to kill off one. This will be called
+// over and over so, if there are more, the'll get hit soon.
+void  xferList::listCleanup(void) {
+
+	xferNode*	trace;
+	
+	trace = (xferNode*)getFirst();
+	while(trace) {
+		if (trace->complete) {
+			unlinkObj(trace);
+			delete(trace);
+			trace = NULL;
+		} else {
+			trace = (xferNode*)trace->getNext();
+		}
+	}	
+}
+
+
+// Maintain the list and let all the current transfers do their thing.
+void  xferList::idle(void) {
+
+	xferNode*	trace;
+	
+	listCleanup();
+	trace = (xferNode*)getFirst();
+	while(trace) {
+		trace->idleTime();
+		trace = (xferNode*)trace->getNext();
+	}
 }
 
 
@@ -533,9 +636,12 @@ ECU::~ECU(void) {  }
 
 void ECU::begin(ECUname* inName,byte inAddr,addrCat inAddCat) {
 
-	copyName(inName);
-	setAddr(inAddr);
-	setAddrCat(inAddCat);
+	copyName(inName);				// We get our name info and copy it to ourselves.
+	setAddr(inAddr);				// Our initial address.
+	setAddrCat(inAddCat);		// Our method of handling address issues.
+	hookup();						// We are guaranteed to be in code section, so hookup.
+	ourAddrList.hookup();		// And hook up these guys as well.
+	ourXferList.hookup();		// That should do it..
 }
 
 
@@ -544,12 +650,14 @@ void ECU::changeState(ECUState newState) {
 	switch(ourState) {
 		case config		:
 			switch(newState) {
-				case config		:
-																	// Whatever.
-				break;	
-				case arbit		:
-					ourState = arbit;							// OK
-				break;
+				case config		:	break;								// No action.
+				case arbit		:											// Shift into arbitration?
+					if (ourAddrCat==arbitraryConfig) {				// If this is a legal state for us..
+						ourAddrList.dumpList();							// Clear out address list for search.
+						sendRequestForAddressClaim(GLOBAL_ADDR);	// Start collecting addresses.
+						ourState = arbit;									// Ok, switch to arbitration.
+					}															// Otherwise there is no change.
+				break;														//
 				case addrErr	:
 					ourState = addrErr;						// Can't see how, but. Whatever.
 				case running	:
@@ -631,7 +739,7 @@ void ECU::handleMsg(message* inMsg) {
 }
 
 
-// Request address claimed. Someone is asking for everyone, or you to show who you are
+// Request address claimed. Someone is asking for everyone, or you, to show who you are
 // and what address you are holding at this moment.
 bool ECU::isReqAddrClaim(message* inMsg) {
 
@@ -690,7 +798,8 @@ void ECU::handleReqAdderClaim(message* inMsg) {
 // address they claimed. If so? We can send back and address claimed?
 void ECU::handleAdderClaim(message* inMsg) {
 	
-	switch(ourState) {
+	ourAddrList.addAddr(inMsg->getSourceAddr());						// In all cases we add this address to our list.
+	switch(ourState) {														// Now, lets see what's what..
 		case arbit		:														// Arbitrating. (We can arbitrate then!)
 			if (inMsg->getSourceAddr()==addr) {							// Claiming our address!?
 				if (inMsg->msgIsLessThanName(this)) {					// If they win the arbitration..
@@ -714,8 +823,8 @@ void ECU::handleAdderClaim(message* inMsg) {
 					sendAddressClaimed();									// Rub in face!
 				}																	//
 			}																		//
-		break;	
-		default : break;
+		break;																	// 
+		default : break;														// In any other state, we have nothing else to do.
 	}
 }
 

@@ -343,19 +343,55 @@ class addrNode :	public linkListObj {
 
 
 
-class addrList :	public linkList {
+class addrList :	public linkList,
+						public idler {
 
 public:
 				addrList(void);
 	virtual	~addrList(void);
 	
-	virtual	void addAddr(byte inAddr);
+				addrNode*	findAddr(byte inAddr);
+	virtual	void			addAddr(byte inAddr);
+};
+
+
+
+//				-----    xferList   &  xferNode    -----
+
+
+
+class xferNode :	public linkListObj {
+
+	public:
+				xferNode(BAMmsg* inMsg,bool inRecieve);
+	virtual	~xferNode(void);
+	
+	virtual	void	idleTime(void);
+	
+	BAMmsg*	msg;
+	byte*		buff;
+	int		numBytes;
+	bool		complete;
+	bool		recieve;
+};
+
+
+
+class xferList :	public linkList,
+						public idler {
+
+public:
+				xferList(void);
+	virtual	~xferList(void);
+	
+	virtual	void	addXfer(BAMmsg* inMsg,bool inRecieve);
+				void	listCleanup(void);
+	virtual	void  idle(void);
 };
 
 
 
 //				----- ECU Electronic control unit. -----
-
 
 
 // Addressing categories for ECU's. Choose one.
@@ -418,6 +454,7 @@ class ECU :	public linkList,
 				addrCat	ourAddrCat;
 				byte		addr;
 				addrList	ourAddrList;
+				xferList	ourXferList;
 };
 
 
