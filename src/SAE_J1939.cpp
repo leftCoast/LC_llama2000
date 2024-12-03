@@ -631,9 +631,11 @@ ECU::ECU(void)
 }
 
 
+// Destructor. I don't think there's anything that's not handled automatically.
 ECU::~ECU(void) {  }
 
 
+// Things we can do to set up shop once we are actually post globals and running in code.
 void ECU::begin(ECUname* inName,byte inAddr,addrCat inAddCat) {
 
 	copyName(inName);				// We get our name info and copy it to ourselves.
@@ -645,11 +647,13 @@ void ECU::begin(ECUname* inName,byte inAddr,addrCat inAddCat) {
 }
 
 
+// We need to change states. This is kinda' the flowchart of the program. What steps do we
+// do, if even possible, to get from one state to another? List 'em here.
 void ECU::changeState(ECUState newState) {
 
 	switch(ourState) {
-		case config		:
-			switch(newState) {
+		case config		:													// **   We are in config state   **
+			switch(newState) {											// ** And we want to switch to.. **
 				case config		:	break;								// No action.
 				case arbit		:											// Shift into arbitration?
 					if (ourAddrCat==arbitraryConfig) {				// If this is a legal state for us..
@@ -658,69 +662,96 @@ void ECU::changeState(ECUState newState) {
 						ourState = arbit;									// Ok, switch to arbitration.
 					}															// Otherwise there is no change.
 				break;														//
-				case addrErr	:
-					ourState = addrErr;						// Can't see how, but. Whatever.
-				case running	:
-					ourState = running;						// OK
-				break;
-			}
-		break;
-		case arbit		:
-			switch(newState) {
-				case config		:
-					ourState = config;						// I guess going back is ok?
-				break;	
-				case arbit		:
-																	// Whatever.
-				break;
-				case addrErr	:
-					ourState = addrErr;						// Can't see how, but. Whatever.
-				case running	:
-					ourState = running;						// Ok, we're running.
-				break;
-			}
-		case running	:
-			switch(newState) {
-				case config		:
-					ourState = config;						// I guess going back is ok?
-				break;	
-				case arbit		:
-					if (ourAddrCat==arbitraryConfig) {	// If we are an arbitration type..
-						ourState = arbit;						// We can go back and do it again.
+				case addrErr	: ourState = addrErr;	break;	// Can't see how, but. Whatever.
+				case running	: ourState = running;	break;	// Config to running? That's ok.
+			}																	//
+		break;																// 
+		case arbit		:													// **    We are in arbit state   **
+			switch(newState) {											// ** And we want to switch to.. **
+				case config		: ourState = config;		break;	// I guess going back to config is ok?							
+				case arbit		: 								break;	// No action.
+				case addrErr	: ourState = addrErr;	break;	// How? Ran out of addresses?
+				case running	:											// Arbit to running.
+					ourAddrList.dumpList();								// Clear out address list, done with it.
+					ourState = running;									// Ok, we're running.
+				break;														//
+			}																	//
+		case running	:													// **  We are in running state   **
+			switch(newState) {											// ** And we want to switch to.. **
+				case config		:											// Config mode? Whatever.
+					ourXferList.dumpList();								// Clear out xferList, done with it.
+					ourState = config;									// I guess going back is ok?
+				break;														//
+				case arbit		:											// Arbitration mode? We'll see..
+					if (ourAddrCat==arbitraryConfig) {				// If we are an arbitration type..
+						ourXferList.dumpList();							// Clear out xferList, done with it.
+						ourAddrList.dumpList();							// Clear out address list for search.
+						addr = NULL_ADDR;									// We give up our address.
+						sendRequestForAddressClaim(GLOBAL_ADDR);	// Send the "where is everyone?"
+						ourState = arbit;									// Back in arbitration again.
+					}															//
+				break;														//
+				case addrErr	:											// Address error, uugh! Address conflict I guess.
+					ourXferList.dumpList();								// Clear out xferList, done with it.
+					addr = NULL_ADDR;										// We give up our address.
+					ourState = addrErr;									// And were in error mode.
+				break;														//
+				case running	: ourState = running;	break;	// Ok, we're still running.
+			}																	//
+		break;																//
+		case addrErr	:													// **    We are in address error state   **
+			switch(newState) {											// **      And we want to switch to..    **
+				case config		: ourState = config;		break;	// Just about the only thing to clear the error.
+				case arbit		:											// Arbitration mode? We'll see..
+					if (ourAddrCat==arbitraryConfig) {				// If we are an arbitration type..
+						ourXferList.dumpList();							// Clear out xferList, done with it.
+						ourAddrList.dumpList();							// Clear out address list for search.
+						addr = NULL_ADDR;									// We give up our address.
+						sendRequestForAddressClaim(GLOBAL_ADDR);	// Send the "where is everyone?"
+						ourState = arbit;									// Back in arbitration again.
 					}
 				break;
 				case addrErr	:
-					ourState = addrErr;						// Oh ohh, address conflict I guess.
-				case running	:
-					ourState = running;						// Ok, we're still running.
-				break;
-			}
-		break;
-		case addrErr	:
-			switch(newState) {
-				case config		:
-					ourState = config;						// Just about the only thing to clear the error.
-				break;	
-				case arbit		:
-				case addrErr	:
-				case running	:
-					ourState = addrErr;						// None of these is going back to fix the error. So..
-				break;
+				case running	: ourState = addrErr;	break;	// None of these is going back to fix the error. So..
 			}
 		break;
 	}
 }
 
+void msgOut(message* inMsg) {
+	
+	Serial.println("-------------------------");
+	inMsg->showMessage();
+	Serial.println();
+	Serial.println();
+}
 
+
+// We are passed in a message to handle. (From our progeny, or ourselves, if assembled.)
+// First  we see if it's a network task that we have to handle ourselves. Then, if not, we
+// ask each the CAs if one of them can handl it. Once a CA handles it, or none will. We
+// are done.
 void ECU::handleMsg(message* inMsg) {
 
 	CA*	trace;
 	bool	done;
 	
-	if (isReqAddrClaim(inMsg)) handleReqAdderClaim(inMsg);
-	else if (isAddrClaim(inMsg)) handleAdderClaim(inMsg);
-	else if (isCantClaim(inMsg)) handleCantClaim(inMsg);
-	else if (isCommandedAddr(inMsg)) handleComAddr(inMsg);
+	if (isReqAddrClaim(inMsg)) {
+		msgOut(inMsg);
+		handleReqAdderClaim(inMsg);
+	}
+	else if (isAddrClaim(inMsg)) {
+		handleAdderClaim(inMsg);
+		msgOut(inMsg);
+	}
+	else if (isCantClaim(inMsg)) {
+		handleCantClaim(inMsg);
+		msgOut(inMsg);
+	}
+	else if (isCommandedAddr(inMsg)) {
+		handleComAddr(inMsg);
+		msgOut(inMsg);
+	}
 	else if (ourState==running) {
 		done = false;
 		trace = (CA*)getFirst();
@@ -732,6 +763,7 @@ void ECU::handleMsg(message* inMsg) {
 					trace = (CA*)trace->getNext();
 				}
 			} else {
+				msgOut(inMsg);
 				done = true;
 			}
 		}
@@ -739,8 +771,8 @@ void ECU::handleMsg(message* inMsg) {
 }
 
 
-// Request address claimed. Someone is asking for everyone, or you, to show who you are
-// and what address you are holding at this moment.
+// Request address claimed. Someone is asking for everyone, or us, to show who they are
+// and what address they are holding at this moment.
 bool ECU::isReqAddrClaim(message* inMsg) {
 
 	if (inMsg->getPGN()==REQ_MESSAGE && inMsg->getNumBytes()==3) return true;
@@ -757,6 +789,7 @@ bool ECU::isAddrClaim(message* inMsg) {
 	if (inMsg->getPGN()==ADDR_CLAIMED && inMsg->getSourceAddr()==GLOBAL_ADDR && inMsg->getNumBytes()==8) return true;
 	return false;
 }
+
 
 // Someone is telling the network that they can not claim an address at all.
 bool ECU::isCantClaim(message* inMsg) {
@@ -805,22 +838,23 @@ void ECU::handleAdderClaim(message* inMsg) {
 				if (inMsg->msgIsLessThanName(this)) {					// If they win the arbitration..
 					addr = NULL_ADDR;											// We give up the address.
 				} else {															// Else, we win the name fight.
-					sendAddressClaimed();									// Rub in face!
+					sendAddressClaimed(true);								// Rub in face!
 				}																	//
 			}																		//
-		break;
+		break;																	//
 		case running	:														// Running.											
 			if (inMsg->getSourceAddr()==addr) {							// Claiming our address!?
 				if (inMsg->msgIsLessThanName(this)) {					// If they win the arbitration..
 					addr = NULL_ADDR;											// We give up the address.
 					if (ourAddrCat==arbitraryConfig) {					// If we do we do arbitration..
 						changeState(arbit);									// We go back to arbitration.
-					} else {
+					} else {														// Else, we don't do arbitration..
 						sendCannotClaimAddress();							// We send we are stuck;
+						addr = NULL_ADDR;										// Give up address.
 						changeState(addrErr);								// We go to address error state.
 					}																//
 				} else {															// Else WE WON the name game!
-					sendAddressClaimed();									// Rub in face!
+					sendAddressClaimed(true);								// Rub in face!
 				}																	//
 			}																		//
 		break;																	// 
@@ -830,7 +864,7 @@ void ECU::handleAdderClaim(message* inMsg) {
 
 
 // We have a message telling someone, or all, that they can not claim an address. I don't
-// have any response to this. "Gee too bad"? For now I guess it's handled. 
+// have any response to this. "Gee too bad"? For now I guess, it's handled. 
 void ECU::handleCantClaim(message* inMsg) { }
 
 
@@ -841,20 +875,14 @@ void ECU::handleComAddr(message* inMsg) {
 
 	if (ourAddrCat==commandConfig) {				// Only commandConfig addressing can do this.
 		switch(ourState) {							// If our state is..
-			case	addrErr	:							// Address error. But how can it receive this?
-				changeState(config);					// Say it does, set to config.
-				changeState(running);				// Then running..
-			case running	:							// Or already running. State we SHOULD be in.
+			case running	:							// Running is the only state we COULD see it in.
 				addr = inMsg->getDataByte(8);		// Grab the address and plug it in.
-				sendAddressClaimed();				// Tell the neighborhood.
+				sendAddressClaimed(true);			// Tell the neighborhood.
 			break;										// And we're done.
 			default			: break;					// Else we just ignore it. They are crazy. Or power hungry.
 		}
 	}
 }
-
-
-void  ECU::setupAddrList(void) { ourAddrList.dumpList(); }
 
 
 // See how we deal with addressing.
@@ -882,12 +910,15 @@ void ECU::setAddr(byte inAddr) { addr		= inAddr; }
 // arbitraryConfig
 
 // This sends the request to inAddr to send back their name. inAdder can be specific or
-// GLOBAL_ADDR to hit everyone.
+// GLOBAL_ADDR to hit everyone. The hope is that whomever called this cleared out the
+// address list. Not the end of the world if not.
 void ECU::sendRequestForAddressClaim(byte inAddr) {
+	Serial.print("sendRequestForAddressClaim(");
+	Serial.print(inAddr);
+	Serial.println(")");
 	
 	message	ourMsg(3);						// Create a message with 3 byte data buffer.
 	
-	setupAddrList();							// We ask for info, clear a place to store it.
 	ourMsg.setDataByte(0,0);				// Byte zero, gets zero.
 	ourMsg.setDataByte(1,0xEE);			// Byte one, gets 0xEE.
 	ourMsg.setDataByte(2,0);				// Byte 2 gets zero. These three are saying "Send your name!"

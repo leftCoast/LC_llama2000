@@ -59,7 +59,7 @@ class llama2000 :   public ECU {
             CANMsgObj*  getMsgObj(uint32_t inPGN);
 	virtual  void			sendMsg(message* outMsg);
 	virtual	void			recieveMsg(void);
-    
+   virtual	void			idle(void);
    protected:
             int			resetPin;
             int			intPin;

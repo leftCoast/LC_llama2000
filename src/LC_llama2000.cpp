@@ -80,7 +80,7 @@ bool llama2000::begin(int inCSPin) {
 	aName.setVehSys(DEV_CLASS_INST);						//	We are an instrument.
 	aName.setSystemInst(0);									// We are the first of our device class.
 	aName.setIndGroup(Marine);								// What kind of machine are we ridin' on?
-	ECU::begin(&aName,NULL_ADDR,arbitraryConfig);	// Here's our name, default address and address category.													
+	ECU::begin(&aName,150,arbitraryConfig);			// Here's our name, default address and address category.													
 	pinMode(resetPin, OUTPUT);								// Setup our reset pin.
 	delay(50);													// Sit for a bit..
 	digitalWrite(resetPin, LOW);							// Set reset low.
@@ -127,6 +127,11 @@ void llama2000::sendMsg(message* outMsg) {
    uint32_t CANID;
    int		numBytes;
    
+   Serial.println("Sending..");
+   outMsg->showMessage();
+   Serial.println();
+   Serial.println();
+   
    if (outMsg) {
 		CANID = outMsg->getCANID();
 		numBytes = outMsg->getNumBytes();
@@ -157,6 +162,11 @@ void llama2000::recieveMsg(void) {
 }
 
 
+void llama2000::idle(void) {
+
+	ECU::idle();
+	recieveMsg();
+}
 
 // ************* CANMsgObj *************
 

@@ -436,7 +436,6 @@ class ECU :	public linkList,
 				void		handleAdderClaim(message* inMsg);			// Handle an address claimed msg.
 				void		handleCantClaim(message* inMsg);				// Handle a failed to claim an address msg.				
 				void		handleComAddr(message* inMsg);				// Handle a commanded address message.
-				void		setupAddrList(void);								// Clear out our address list for incoming claimed addresses.
 				void		setAddrCat(addrCat inAddrCat);				// How we deal with addressing.
 				addrCat	getAddrCat(void);									// See how we deal with addressing.
 				byte		getAddr(void);										// Here's our current address.
