@@ -425,27 +425,28 @@ class ECU :	public linkList,
 	virtual	~ECU(void);
 		
 	virtual	void		begin(ECUname* inName,byte inAddr,addrCat inAddCat);	// Initial setup.
-				void		changeState(ECUState newState);				// Keeping track of what we are up to.
-	virtual  void		sendMsg(message* outMsg)=0;					// You have to fill this one out.
-	virtual  void		handleMsg(message* inMsg);						// When a message comes in, pass it into here.
-				bool		isReqAddrClaim(message* inMsg);				// Is this a request for address claimed msg?
-				bool		isAddrClaim(message* inMsg);					// Is this an address claimed msg?
-				bool		isCantClaim(message* inMsg);					// Is this a fail to claim address msg?
-				bool		isCommandedAddr(message* inMsg);				// Is this a commanded address msg?
-				void		handleReqAdderClaim(message* inMsg);		// Handle a request for address claimed msg.
-				void		handleAdderClaim(message* inMsg);			// Handle an address claimed msg.
-				void		handleCantClaim(message* inMsg);				// Handle a failed to claim an address msg.				
-				void		handleComAddr(message* inMsg);				// Handle a commanded address message.
-				void		setAddrCat(addrCat inAddrCat);				// How we deal with addressing.
-				addrCat	getAddrCat(void);									// See how we deal with addressing.
-				byte		getAddr(void);										// Here's our current address.
-				void		setAddr(byte inAddr);							// Set a new address.
+				void		changeState(ECUState newState);								// Keeping track of what we are up to.
+	virtual  void		sendMsg(message* outMsg)=0;									// You have to fill this one out.
+	virtual  void		handleMsg(message* inMsg);										// When a message comes in, pass it into here.
+				bool		isReqAddrClaim(message* inMsg);								// Is this a request for address claimed msg?
+				bool		isAddrClaim(message* inMsg);									// Is this an address claimed msg?
+				bool		isCantClaim(message* inMsg);									// Is this a fail to claim address msg?
+				bool		isCommandedAddr(message* inMsg);								// Is this a commanded address msg?
+				void		handleReqAdderClaim(message* inMsg);						// Handle a request for address claimed msg.
+				void		handleAdderClaim(message* inMsg);							// Handle an address claimed msg.
+				void		handleCantClaim(message* inMsg);								// Handle a failed to claim an address msg.				
+				void		handleComAddr(message* inMsg);								// Handle a commanded address message.
+				void		setAddrCat(addrCat inAddrCat);								// How we deal with addressing.
+				addrCat	getAddrCat(void);													// See how we deal with addressing.
+				byte		getAddr(void);														// Here's our current address.
+				void		setAddr(byte inAddr);											// Set a new address.
+				void		clearErr(void);													// This will clear the address error and restart the process.
 				
 				// arbitraryConfig
-				void		sendRequestForAddressClaim(byte inAddr);	// Tell us your name and address.
-				void		sendAddressClaimed(bool tryFail=true);		// This is our name and address.
-				void		sendCannotClaimAddress(void);					// We can't find an address!
-				void		sendCommandedAddress(byte comAddr);			// HEY YOU! Set this as your address!
+				void		sendRequestForAddressClaim(byte inAddr);					// Tell us your name and address.
+				void		sendAddressClaimed(bool tryFail=true);						// This is our name and address.
+				void		sendCannotClaimAddress(void);									// We can't find an address!
+				void		sendCommandedAddress(byte comAddr);							// HEY YOU! Set this as your address!
 
 	virtual	void		idle(void);
 				

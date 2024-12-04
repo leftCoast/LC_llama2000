@@ -638,12 +638,23 @@ ECU::~ECU(void) {  }
 // Things we can do to set up shop once we are actually post globals and running in code.
 void ECU::begin(ECUname* inName,byte inAddr,addrCat inAddCat) {
 
-	copyName(inName);				// We get our name info and copy it to ourselves.
-	setAddr(inAddr);				// Our initial address.
-	setAddrCat(inAddCat);		// Our method of handling address issues.
-	hookup();						// We are guaranteed to be in code section, so hookup.
-	ourAddrList.hookup();		// And hook up these guys as well.
-	ourXferList.hookup();		// That should do it..
+	copyName(inName);							// We get our name info and copy it to ourselves.
+	setAddr(inAddr);							// Our initial address.
+	setAddrCat(inAddCat);					// Our method of handling address issues.
+	hookup();									// We are guaranteed to be in code section, so hookup.
+	ourAddrList.hookup();					// And hook up these guys as well.
+	ourXferList.hookup();					// That should do it..
+}
+
+
+void stateName(ECUState aState) {
+	
+	switch(aState) {
+		case config		: Serial.print("Configuration");	break;
+		case arbit		: Serial.print("Arbitration");	break;
+		case running	: Serial.print("Running");			break;
+		case addrErr	: Serial.print("Address error");	break;
+	}
 }
 
 
@@ -651,10 +662,15 @@ void ECU::begin(ECUname* inName,byte inAddr,addrCat inAddCat) {
 // do, if even possible, to get from one state to another? List 'em here.
 void ECU::changeState(ECUState newState) {
 
+	Serial.print("*** State change from ");
+	stateName(ourState);
+	Serial.print(" to ");
+	stateName(newState);
+	Serial.println(" with result of.. ");
 	switch(ourState) {
 		case config		:													// **   We are in config state   **
 			switch(newState) {											// ** And we want to switch to.. **
-				case config		:	break;								// No action.
+				case config		: 								break;	// No action.
 				case arbit		:											// Shift into arbitration?
 					if (ourAddrCat==arbitraryConfig) {				// If this is a legal state for us..
 						ourAddrList.dumpList();							// Clear out address list for search.
@@ -663,7 +679,10 @@ void ECU::changeState(ECUState newState) {
 					}															// Otherwise there is no change.
 				break;														//
 				case addrErr	: ourState = addrErr;	break;	// Can't see how, but. Whatever.
-				case running	: ourState = running;	break;	// Config to running? That's ok.
+				case running	:											// Config to running? That's ok.
+					sendAddressClaimed(true);							// Tell everyone where we plan to sit.
+					ourState = running;									//
+				break;														// 
 			}																	//
 		break;																// 
 		case arbit		:													// **    We are in arbit state   **
@@ -716,6 +735,9 @@ void ECU::changeState(ECUState newState) {
 			}
 		break;
 	}
+	Serial.print("*** ");
+	stateName(ourState);
+	Serial.println();
 }
 
 void msgOut(message* inMsg) {
@@ -906,6 +928,15 @@ byte ECU::getAddr(void) { return addr; }
 // Fine, our address is now inAddr.
 void ECU::setAddr(byte inAddr) { addr		= inAddr; }
 
+// Assuming that in some way YOU fixed the error. This will clear the address error and
+// restart the process. By YOU I mean let's say you had an address collision? YOU set a
+// unclaimed address by calling setAddress() and now it's time to run on that new address.
+void ECU::clearErr(void) {
+
+	ourState = config;	// Next pass though idle() will kick off the machine.
+}
+	
+
 
 // arbitraryConfig
 
@@ -973,14 +1004,27 @@ void ECU::sendCommandedAddress(byte comAddr) {
 void ECU::idle(void) {
 
 	CA*			trace;
-
-	if (ourState==running) {					// If we're in running state? We'll run the CAs.
-		trace = (CA*)getFirst();				// Well start at the beginning and let 'em all have a go.
-		while(trace) {								// While we got something..
-			trace->idleTime();					// Give 'em some time to do things.
-			trace = (CA*)trace->getNext();	// Grab the next one.
-		}
-	}
+	
+	switch(ourState) {
+		case config		:								// We're in config state. Time to start up!
+			if (ourAddrCat==arbitraryConfig) {	// If we do the arbitration thing..
+				changeState(arbit);					// Head into arbitration state.
+			} else {										// Else we don't do arbitration?
+				changeState(running);				// Slid into running state.
+			}												//
+		break;											//
+		case arbit		:								// We're in arbit state.
+															// Not sure what to do here..									
+		break;											//
+		case running	:								// We're in running state. Let the CAs have some runtime.
+			trace = (CA*)getFirst();				// Well start at the beginning and let 'em all have a go.
+			while(trace) {								// While we got something..
+				trace->idleTime();					// Give 'em some time to do things.
+				trace = (CA*)trace->getNext();	// Grab the next one.
+			}												//
+		break;											//
+		case addrErr	:					break;	// Address err? Basically do nothing.
+	}		
 }
 
 
