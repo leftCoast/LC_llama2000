@@ -626,8 +626,9 @@ void  xferList::idle(void) {
 ECU::ECU(void)
 	: linkList(), idler() {
 	
-	ourState	= config;		// We arrive in config mode.
-	addr		= NULL_ADDR;	// No address.
+	ourState			= config;		// We arrive in config mode.
+	addr				= NULL_ADDR;	// No address.
+	waitForClaim	= false;			// No claims, Not waiting..
 }
 
 
@@ -667,10 +668,17 @@ void ECU::changeState(ECUState newState) {
 	Serial.print(" to ");
 	stateName(newState);
 	Serial.println(" with result of.. ");
+	
 	switch(ourState) {
-		case config		:													// **   We are in config state   **
-			switch(newState) {											// ** And we want to switch to.. **
-				case config		: 								break;	// No action.
+		case config		:													// **    We are in config state     **
+			switch(newState) {											// **   And we want to switch to..  **
+				case startWait	:											// Start wait state.
+					startStartTimer();									// Calculate and fire up the timer.		
+				break;														//
+				default	: 										break;	// No other path to take here.
+			}
+		case startWait :													// **    We are in startWait state     **
+			switch(newState) {											// **   And we want to switch to..  **
 				case arbit		:											// Shift into arbitration?
 					if (ourAddrCat==arbitraryConfig) {				// If this is a legal state for us..
 						ourAddrList.dumpList();							// Clear out address list for search.
@@ -678,29 +686,23 @@ void ECU::changeState(ECUState newState) {
 						ourState = arbit;									// Ok, switch to arbitration.
 					}															// Otherwise there is no change.
 				break;														//
-				case addrErr	: ourState = addrErr;	break;	// Can't see how, but. Whatever.
 				case running	:											// Config to running? That's ok.
 					sendAddressClaimed(true);							// Tell everyone where we plan to sit.
 					ourState = running;									//
 				break;														// 
+				default			: 								break;	// No other path to take here.
 			}																	//
-		break;																// 
-		case arbit		:													// **    We are in arbit state   **
-			switch(newState) {											// ** And we want to switch to.. **
-				case config		: ourState = config;		break;	// I guess going back to config is ok?							
-				case arbit		: 								break;	// No action.
+		case arbit		:													// **     We are in arbit state     **
+			switch(newState) {											// **   And we want to switch to..  **
 				case addrErr	: ourState = addrErr;	break;	// How? Ran out of addresses?
 				case running	:											// Arbit to running.
 					ourAddrList.dumpList();								// Clear out address list, done with it.
 					ourState = running;									// Ok, we're running.
 				break;														//
+				default			: 								break;	// No other path to take here.
 			}																	//
-		case running	:													// **  We are in running state   **
-			switch(newState) {											// ** And we want to switch to.. **
-				case config		:											// Config mode? Whatever.
-					ourXferList.dumpList();								// Clear out xferList, done with it.
-					ourState = config;									// I guess going back is ok?
-				break;														//
+		case running	:													// **   We are in running state     **
+			switch(newState) {											// **   And we want to switch to..  **
 				case arbit		:											// Arbitration mode? We'll see..
 					if (ourAddrCat==arbitraryConfig) {				// If we are an arbitration type..
 						ourXferList.dumpList();							// Clear out xferList, done with it.
@@ -715,12 +717,11 @@ void ECU::changeState(ECUState newState) {
 					addr = NULL_ADDR;										// We give up our address.
 					ourState = addrErr;									// And were in error mode.
 				break;														//
-				case running	: ourState = running;	break;	// Ok, we're still running.
+				default			: 								break;	// No other path to take here.
 			}																	//
 		break;																//
-		case addrErr	:													// **    We are in address error state   **
-			switch(newState) {											// **      And we want to switch to..    **
-				case config		: ourState = config;		break;	// Just about the only thing to clear the error.
+		case addrErr	:													// ** We are in address error state **
+			switch(newState) {											// **   And we want to switch to..  **
 				case arbit		:											// Arbitration mode? We'll see..
 					if (ourAddrCat==arbitraryConfig) {				// If we are an arbitration type..
 						ourXferList.dumpList();							// Clear out xferList, done with it.
@@ -728,12 +729,12 @@ void ECU::changeState(ECUState newState) {
 						addr = NULL_ADDR;									// We give up our address.
 						sendRequestForAddressClaim(GLOBAL_ADDR);	// Send the "where is everyone?"
 						ourState = arbit;									// Back in arbitration again.
-					}
-				break;
-				case addrErr	:
-				case running	: ourState = addrErr;	break;	// None of these is going back to fix the error. So..
-			}
-		break;
+					}															//
+				break;														//
+				default			:								break;	// We just stay in error state.
+			}																	//
+		break;																//
+		default					:								break;	// Other states will be switch elsewhere.
 	}
 	Serial.print("*** ");
 	stateName(ourState);
@@ -758,6 +759,7 @@ void ECU::handleMsg(message* inMsg) {
 	CA*	trace;
 	bool	done;
 	
+	inMsg->showMessage();
 	if (isReqAddrClaim(inMsg)) {
 		msgOut(inMsg);
 		handleReqAdderClaim(inMsg);
@@ -808,7 +810,7 @@ bool ECU::isReqAddrClaim(message* inMsg) {
 // to use. If this conflicts with yours? Deal with that.
 bool ECU::isAddrClaim(message* inMsg) {
 	
-	if (inMsg->getPGN()==ADDR_CLAIMED && inMsg->getSourceAddr()==GLOBAL_ADDR && inMsg->getNumBytes()==8) return true;
+	if (inMsg->getPDUf()==0xEE && inMsg->getSourceAddr()==GLOBAL_ADDR && inMsg->getNumBytes()==8) return true;
 	return false;
 }
 
@@ -936,8 +938,27 @@ void ECU::clearErr(void) {
 	ourState = config;	// Next pass though idle() will kick off the machine.
 }
 	
+	
+// Calculate and start the startup time delay. Function of address.
+void ECU::startStartTimer(void) {
+	
+	if (addr>=0 && addr <=127) startupTimer.setTime(.1); return;
+	if (addr>=248 && addr <=253) startupTimer.setTime(.1); return;
+	startupTimer.setTime(250);
+}
 
 
+// Calculate and start the claim time delay. Random function.	
+void ECU::startClaimTimer(void) {
+
+	long	rVal;
+	
+	rVal = random(0, 256);
+	claimTimer.setTime(rVal * 0.6);
+}
+
+
+																					
 // arbitraryConfig
 
 // This sends the request to inAddr to send back their name. inAdder can be specific or
@@ -971,6 +992,8 @@ void ECU::sendAddressClaimed(bool tryFail) {
 	}													// 
 	if (tryFail) {									// If we're trying..
 		ourMsg.setSourceAddr(getAddr());		// Set our address. (ACK)
+		startClaimTimer();						// Start the claim timer.
+		waitForClaim = true;						// Note we are waiting..
 	} else {											// Else we failed to get one..
 		ourMsg.setSourceAddr(NULL_ADDR);		// Set NULL address. (NACK)
 	}
@@ -1007,6 +1030,7 @@ void ECU::idle(void) {
 	
 	switch(ourState) {
 		case config		:								// We're in config state. Time to start up!
+			if (
 			if (ourAddrCat==arbitraryConfig) {	// If we do the arbitration thing..
 				changeState(arbit);					// Head into arbitration state.
 			} else {										// Else we don't do arbitration?

@@ -410,6 +410,7 @@ enum addrCat {
 enum		ECUState {
 	
 	config,				// Still on the bench being assembled.
+	startWait,			// Certain addresses call for a start wait.
 	arbit,				// Doing address arbitration.
 	addrErr,				// Had an address error that we can't fix alone.
 	running				// Everything seems fine. We're running.
@@ -441,7 +442,8 @@ class ECU :	public linkList,
 				byte		getAddr(void);														// Here's our current address.
 				void		setAddr(byte inAddr);											// Set a new address.
 				void		clearErr(void);													// This will clear the address error and restart the process.
-				
+				void		startStartTimer(void);											// Calculate and start the startup time delay. Function of address.
+				void		startClaimTimer(void);											// Calculate and start the claim time delay. Random function.
 				// arbitraryConfig
 				void		sendRequestForAddressClaim(byte inAddr);					// Tell us your name and address.
 				void		sendAddressClaimed(bool tryFail=true);						// This is our name and address.
@@ -455,6 +457,9 @@ class ECU :	public linkList,
 				byte		addr;
 				addrList	ourAddrList;
 				xferList	ourXferList;
+				timeObj	startupTimer;
+				timeObj	claimTimer;
+				bool		waitForClaim;
 };
 
 
