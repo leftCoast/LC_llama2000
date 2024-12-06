@@ -168,9 +168,12 @@ void message::showMessage(void) {
 		Serial.print("[ ");Serial.print(msgData[i]);Serial.print(" ]");Serial.print('\t');
 	}
 	Serial.println();
+	/*
 	for (int i=0;i<numBytes;i++) {
 		Serial.print("[ 0x");Serial.print(msgData[i],HEX);Serial.print(" ]");Serial.print('\t');
 	}
+	Serial.println();
+	*/
 }
 
 
@@ -524,8 +527,10 @@ addrNode* addrList::findAddr(byte inAddr) {
 void addrList::addAddr(byte inAddr) {
 
 	addrNode* newNode;
-	
-	if (!findAddr(inAddr)) {
+	Serial.print("*** Adding ");
+	Serial.print(inAddr);
+	Serial.println("  ***");
+	if (findAddr(inAddr)!=NULL) {
 		newNode = new addrNode(inAddr);
 		if (newNode) addToTop(newNode);
 	}
@@ -538,11 +543,13 @@ void addrList::showList(void) {
 	addrNode* trace;
 	
 	Serial.println("----  Address list ----");
-	trace = (addrNode*) getFirst();
+	Serial.print("Number items : ");
+	Serial.println(getCount());
+	trace = (addrNode*)getFirst();
 	while(trace) {
 		Serial.print("Address : ");
 		Serial.println(trace->addr);
-		trace = (addrNode*) trace->getNext();
+		trace = (addrNode*)trace->getNext();
 	}
 	Serial.println();
 }
@@ -688,7 +695,8 @@ void ECU::changeState(ECUState newState) {
 		case config		:													// **    We are in config state     **
 			switch(newState) {											// **   And we want to switch to..  **
 				case startHold	:											// Start holding state.
-					startHoldTimer();										// Calculate and fire up the timer.		
+					startHoldTimer();										// Calculate and fire up the timer.
+					ourState = startHold;								// Holding!		
 				break;														//
 				default	: 										break;	// No other path to take here.
 			}
@@ -767,36 +775,39 @@ void ECU::handleMsg(message* inMsg) {
 	CA*	trace;
 	bool	done;
 	
-	inMsg->showMessage();
+	msgOut(inMsg);
 	if (isReqAddrClaim(inMsg)) {
-		msgOut(inMsg);
+		Serial.println("Is REQ Claim");
 		handleReqAdderClaim(inMsg);
 	}
 	else if (isAddrClaim(inMsg)) {
+		Serial.println("Is addr Claim");
 		handleAdderClaim(inMsg);
-		msgOut(inMsg);
 	}
 	else if (isCantClaim(inMsg)) {
+		Serial.println("Is CAN'T Claim");
 		handleCantClaim(inMsg);
-		msgOut(inMsg);
 	}
 	else if (isCommandedAddr(inMsg)) {
+		Serial.println("Is COMMAND addr");
 		handleComAddr(inMsg);
-		msgOut(inMsg);
 	}
-	else if (ourState==running) {
-		done = false;
-		trace = (CA*)getFirst();
-		while(!done) {
-			if (trace) {
-				if (trace->handleMsg(inMsg)) {
-					done = true;
+	else {
+		Serial.println("All returned false.");
+		if (ourState==running) {
+			
+			done = false;
+			trace = (CA*)getFirst();
+			while(!done) {
+				if (trace) {
+					if (trace->handleMsg(inMsg)) {
+						done = true;
+					} else {
+						trace = (CA*)trace->getNext();
+					}
 				} else {
-					trace = (CA*)trace->getNext();
+					done = true;
 				}
-			} else {
-				msgOut(inMsg);
-				done = true;
 			}
 		}
 	}
@@ -806,19 +817,17 @@ void ECU::handleMsg(message* inMsg) {
 // Request address claimed. Someone is asking for everyone, or us, to show who they are
 // and what address they are holding at this moment.
 bool ECU::isReqAddrClaim(message* inMsg) {
-
-	if (inMsg->getPGN()==REQ_MESSAGE && inMsg->getNumBytes()==3) return true;
-	if (inMsg->getPDUf()==REQ_ADDR_CLAIM_PF && inMsg->getR()==0 && inMsg->getDP()==0 && inMsg->getNumBytes()==3) return true;
+	Serial.println("isReqAddrClaim?");
+	if (inMsg->getPDUf()==REQ_ADDR_CLAIM_PF && inMsg->getNumBytes()==3) return true;
 	return false;
-	
 }
 
 
 // Address Claimed. Someone is telling the world that this is the address they are going
 // to use. If this conflicts with yours? Deal with that.
 bool ECU::isAddrClaim(message* inMsg) {
-	
-	if (inMsg->getPDUf()==0xEE && inMsg->getSourceAddr()==GLOBAL_ADDR && inMsg->getNumBytes()==8) return true;
+	Serial.println("isAddrClaim?");
+	if (inMsg->getPDUf()==ADDR_CLAIMED_PF && inMsg->getSourceAddr()==GLOBAL_ADDR /*&& inMsg->getNumBytes()==8*/) return true;
 	return false;
 }
 
@@ -862,7 +871,7 @@ void ECU::handleReqAdderClaim(message* inMsg) {
 // We have a message telling us that someone claimed an address. Let's see if it's our
 // address they claimed. If so? We can send back and address claimed?
 void ECU::handleAdderClaim(message* inMsg) {
-	
+	Serial.println("***** ADDRESS CLAIM *****");
 	ourAddrList.addAddr(inMsg->getSourceAddr());						// In all cases we add this address to our list.
 	switch(ourState) {														// Now, lets see what's what..
 		case arbit		:														// Arbitrating. (We can arbitrate then!)

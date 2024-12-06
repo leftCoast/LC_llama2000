@@ -20,9 +20,9 @@ class ECUname;
 #define COMMAND_ADDR		65240		// We were told to use this one.
 #define BAM_COMMAND		60416		// Big load coming! Make room!
 
-#define REQ_ADDR_CLAIM_PF	234	// PS = Destination addr.
+#define REQ_ADDR_CLAIM_PF	234	// 0xEA PS = Destination addr.
 #define BAM_PF					236	// PS = 255 or Destination addr.
-#define ADDR_CLAIMED_PF		238	// PS = 255. Works for both (ACK) & (NACK)
+#define ADDR_CLAIMED_PF		238	// 0xEE PS = 255. Works for both (ACK) & (NACK)
 #define COMMAND_ADDR_PF		254	// PS = 216. Giving PGN of COMMAND_ADDR above.
 
 
