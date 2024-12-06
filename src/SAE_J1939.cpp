@@ -818,8 +818,11 @@ void ECU::handleMsg(message* inMsg) {
 // Request address claimed. Someone is asking for everyone, or us, to show who they are
 // and what address they are holding at this moment.
 bool ECU::isReqAddrClaim(message* inMsg) {
+	
 	Serial.println("isReqAddrClaim?");
-	if (inMsg->getPDUf()==REQ_ADDR_CLAIM_PF && inMsg->getNumBytes()==3) return true;
+	if (inMsg->getPDUf()==REQ_ADDR_CLAIM_PF && inMsg->getNumBytes()==3) {
+		return true;
+	}
 	return false;
 }
 
@@ -827,8 +830,11 @@ bool ECU::isReqAddrClaim(message* inMsg) {
 // Address Claimed. Someone is telling the world that this is the address they are going
 // to use. If this conflicts with yours? Deal with that.
 bool ECU::isAddrClaim(message* inMsg) {
+	
 	Serial.println("isAddrClaim?");
-	if (inMsg->getPDUf()==ADDR_CLAIMED_PF && inMsg->getPDUs()==GLOBAL_ADDR && inMsg->getNumBytes()==8) return true;
+	if (inMsg->getPDUf()==ADDR_CLAIMED_PF && inMsg->getPDUs()==GLOBAL_ADDR && inMsg->getNumBytes()==8) {
+		return true;
+	}
 	return false;
 }
 
@@ -836,7 +842,10 @@ bool ECU::isAddrClaim(message* inMsg) {
 // Someone is telling the network that they can not claim an address at all.
 bool ECU::isCantClaim(message* inMsg) {
 	
-	if (inMsg->getPGN()==ADDR_CLAIMED && inMsg->getSourceAddr()==NULL_ADDR && inMsg->getNumBytes()==8) return true;
+	Serial.println("isCantClaim?");
+	if (inMsg->getPDUf()==ADDR_CLAIMED_PF && inMsg->getPDUs()==GLOBAL_ADDR && inMsg->getSourceAddr()==NULL_ADDR && inMsg->getNumBytes()==8) {
+		return true;
+	}
 	return false;
 }
 
@@ -879,9 +888,11 @@ void ECU::handleAdderClaim(message* inMsg) {
 			if (inMsg->getSourceAddr()==addr) {							// Claiming our address!?
 				if (waitingForClaim) {										// If we are waiting for a contesting claim..
 					if (inMsg->msgIsLessThanName(this)) {				// If they win the arbitration..
+						Serial.println("***** WE LOOSE ADDRESS CLAIM *****");
 						sendAddressClaimed(false);							// Let them know, that we know, that they won.
 						addr = NULL_ADDR;										// We give up the address. This flags it for us as well.
 					} else {														// Else, we win the name fight.
+						Serial.println("***** WE WIN ADDRESS CLAIM *****");
 						sendAddressClaimed(true);							// Rub in face!
 					}																//
 				}																	// Otherwise, all we want is the list of addresses.
@@ -1044,12 +1055,22 @@ void ECU::sendCommandedAddress(byte comAddr) {
 
 // From whatever state we are in now, start arbitration.
 void ECU::startArbit(void) {
+	
 	Serial.println("**** startArbit() ****");
-	ourAddrList.dumpList();							// Clear out list of addresses.
-	ourXferList.dumpList();							// Clear out transfer list as well. Can't finish any.
-	sendRequestForAddressClaim(GLOBAL_ADDR);	// Start gathering addresses again.
-	arbitTimer.setTime(250);						// Set the timer.
-	ourArbitState = waitingForAddrs;				// Note that we are gathering addresses again.
+	
+	if (addr==NULL_ADDR) {								// If we have no current address..
+		Serial.println("**** No Addr, start a list.. ****");
+		ourAddrList.dumpList();							// Clear out list of addresses.
+		ourXferList.dumpList();							// Clear out transfer list as well. Can't finish any.
+		sendRequestForAddressClaim(GLOBAL_ADDR);	// Start gathering addresses again.
+		arbitTimer.setTime(250);						// Set the timer.
+		ourArbitState = waitingForAddrs;				// Note that we are gathering addresses again.
+	} else {													// Else we DO have an address..
+		Serial.println("**** Have Addr, see if it works. ****");
+		sendAddressClaimed();							// See if we can claim what we got.
+		arbitTimer.setTime(250);						// Set the timer.
+		ourArbitState=waitingForClaim;
+	}
 }
 
 
@@ -1071,15 +1092,17 @@ byte ECU::chooseAddr(void) {
 	return NULL_ADDR;
 }
 
-
 // Arbitration is all about timers. That and adress lists..
 void ECU::checkArbit(void) {
 	
-	if (ourArbitState==waitingForAddrs) {			// If gathering addresses..
+	if (ourArbitState==waitingForAddrs) {			// If gathering addresses, to choose a new one..
 		if (arbitTimer.ding()) {						// If gathering's over..
 			arbitTimer.reset();							// Shut off the timer.
 			ourAddrList.showList();						// Well let's see 'em. DEBUGGING
-			addr = chooseAddr();							// Choose an address.
+			addr = chooseAddr();							// Choose an address using the list to compare.
+			Serial.print("***** CHOOSING NEW ADDRESS : ");
+			Serial.print(addr);
+			Serial.println(" *****");
 			if (addr!=NULL_ADDR) {						// If we found an unclaimed one..
 				sendAddressClaimed(true);				// Send address claim on new address.
 				startClaimTimer();						// Start the claim timer.
@@ -1094,6 +1117,7 @@ void ECU::checkArbit(void) {
 			if (addr==NULL_ADDR) {						// If we are back to NULL_ADDR, we were challenged and lost!
 				startArbit();								// We start all over again.
 			} else {											// Else, we have a unchallenged address!
+				Serial.println("***** SUCCESS! No one wanted the new address! *****");
 				changeState(running);					// Whoo hoo! Go to running state.
 			}
 		}
