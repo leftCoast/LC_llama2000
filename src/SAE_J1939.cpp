@@ -527,10 +527,8 @@ addrNode* addrList::findAddr(byte inAddr) {
 void addrList::addAddr(byte inAddr) {
 
 	addrNode* newNode;
-	Serial.print("*** Adding ");
-	Serial.print(inAddr);
-	Serial.println("  ***");
-	if (findAddr(inAddr)!=NULL) {
+	
+	if (findAddr(inAddr)==NULL) {
 		newNode = new addrNode(inAddr);
 		if (newNode) addToTop(newNode);
 	}
@@ -700,6 +698,7 @@ void ECU::changeState(ECUState newState) {
 				break;														//
 				default	: 										break;	// No other path to take here.
 			}
+		break;
 		case startHold :													// **    We are in startHold state     **
 			switch(newState) {											// **   And we want to switch to..  **
 				case arbit		:											// Shift into arbitration?
@@ -713,7 +712,8 @@ void ECU::changeState(ECUState newState) {
 					ourState = running;									// Get busy running..
 				break;														// 
 				default			: 								break;	// No other path to take here.
-			}																	//
+			}
+		break;																//
 		case arbit		:													// **     We are in arbit state     **
 			switch(newState) {											// **   And we want to switch to..  **
 				case addrErr	: ourState = addrErr;	break;	// How? Ran out of addresses? (Actually yes)
@@ -722,7 +722,8 @@ void ECU::changeState(ECUState newState) {
 					ourState = running;									// Ok, we're running.
 				break;														//
 				default			: 								break;	// No other path to take here.
-			}																	//
+			}
+		break;																	//
 		case running	:													// **   We are in running state     **
 			switch(newState) {											// **   And we want to switch to..  **
 				case arbit		:											// Arbitration mode? We'll see..
@@ -827,7 +828,7 @@ bool ECU::isReqAddrClaim(message* inMsg) {
 // to use. If this conflicts with yours? Deal with that.
 bool ECU::isAddrClaim(message* inMsg) {
 	Serial.println("isAddrClaim?");
-	if (inMsg->getPDUf()==ADDR_CLAIMED_PF && inMsg->getSourceAddr()==GLOBAL_ADDR /*&& inMsg->getNumBytes()==8*/) return true;
+	if (inMsg->getPDUf()==ADDR_CLAIMED_PF && inMsg->getPDUs()==GLOBAL_ADDR && inMsg->getNumBytes()==8) return true;
 	return false;
 }
 
@@ -1043,7 +1044,7 @@ void ECU::sendCommandedAddress(byte comAddr) {
 
 // From whatever state we are in now, start arbitration.
 void ECU::startArbit(void) {
-
+	Serial.println("**** startArbit() ****");
 	ourAddrList.dumpList();							// Clear out list of addresses.
 	ourXferList.dumpList();							// Clear out transfer list as well. Can't finish any.
 	sendRequestForAddressClaim(GLOBAL_ADDR);	// Start gathering addresses again.
@@ -1090,7 +1091,6 @@ void ECU::checkArbit(void) {
 	}															//
 	else if (ourArbitState==waitingForClaim) {	// Waiting to see if our address claim is challenged.
 		if (arbitTimer.ding()) {						// If waiting for challenge is over..
-			sendAddressClaimed(false);				// Let the winner know, that we know, that they won.
 			if (addr==NULL_ADDR) {						// If we are back to NULL_ADDR, we were challenged and lost!
 				startArbit();								// We start all over again.
 			} else {											// Else, we have a unchallenged address!
