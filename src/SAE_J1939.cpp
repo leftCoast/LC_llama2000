@@ -532,6 +532,21 @@ void addrList::addAddr(byte inAddr) {
 }
 
 
+// Let's see the list of addresses we got..
+void addrList::showList(void) {
+
+	addrNode* trace;
+	
+	Serial.println("----  Address list ----");
+	trace = (addrNode*) getFirst();
+	while(trace) {
+		Serial.print("Address : ");
+		Serial.println(trace->addr);
+		trace = (addrNode*) trace->getNext();
+	}
+	Serial.println();
+}
+		
 
 //				-----    xferList   &  xferNode    -----
 
@@ -628,7 +643,6 @@ ECU::ECU(void)
 	
 	ourState			= config;		// We arrive in config mode.
 	addr				= NULL_ADDR;	// No address.
-	waitForClaim	= false;			// No claims, Not waiting..
 }
 
 
@@ -648,10 +662,11 @@ void ECU::begin(ECUname* inName,byte inAddr,addrCat inAddCat) {
 }
 
 
-void stateName(ECUState aState) {
+void ECU::stateName(ECUState aState) {
 	
 	switch(aState) {
 		case config		: Serial.print("Configuration");	break;
+		case startHold	: Serial.print("Start wait");		break;
 		case arbit		: Serial.print("Arbitration");	break;
 		case running	: Serial.print("Running");			break;
 		case addrErr	: Serial.print("Address error");	break;
@@ -672,29 +687,28 @@ void ECU::changeState(ECUState newState) {
 	switch(ourState) {
 		case config		:													// **    We are in config state     **
 			switch(newState) {											// **   And we want to switch to..  **
-				case startWait	:											// Start wait state.
-					startStartTimer();									// Calculate and fire up the timer.		
+				case startHold	:											// Start holding state.
+					startHoldTimer();										// Calculate and fire up the timer.		
 				break;														//
 				default	: 										break;	// No other path to take here.
 			}
-		case startWait :													// **    We are in startWait state     **
+		case startHold :													// **    We are in startHold state     **
 			switch(newState) {											// **   And we want to switch to..  **
 				case arbit		:											// Shift into arbitration?
 					if (ourAddrCat==arbitraryConfig) {				// If this is a legal state for us..
-						ourAddrList.dumpList();							// Clear out address list for search.
-						sendRequestForAddressClaim(GLOBAL_ADDR);	// Start collecting addresses.
+						startArbit();										// Start up arbitration.
 						ourState = arbit;									// Ok, switch to arbitration.
 					}															// Otherwise there is no change.
 				break;														//
 				case running	:											// Config to running? That's ok.
 					sendAddressClaimed(true);							// Tell everyone where we plan to sit.
-					ourState = running;									//
+					ourState = running;									// Get busy running..
 				break;														// 
 				default			: 								break;	// No other path to take here.
 			}																	//
 		case arbit		:													// **     We are in arbit state     **
 			switch(newState) {											// **   And we want to switch to..  **
-				case addrErr	: ourState = addrErr;	break;	// How? Ran out of addresses?
+				case addrErr	: ourState = addrErr;	break;	// How? Ran out of addresses? (Actually yes)
 				case running	:											// Arbit to running.
 					ourAddrList.dumpList();								// Clear out address list, done with it.
 					ourState = running;									// Ok, we're running.
@@ -705,10 +719,7 @@ void ECU::changeState(ECUState newState) {
 			switch(newState) {											// **   And we want to switch to..  **
 				case arbit		:											// Arbitration mode? We'll see..
 					if (ourAddrCat==arbitraryConfig) {				// If we are an arbitration type..
-						ourXferList.dumpList();							// Clear out xferList, done with it.
-						ourAddrList.dumpList();							// Clear out address list for search.
-						addr = NULL_ADDR;									// We give up our address.
-						sendRequestForAddressClaim(GLOBAL_ADDR);	// Send the "where is everyone?"
+						startArbit();										// Start up arbitration.
 						ourState = arbit;									// Back in arbitration again.
 					}															//
 				break;														//
@@ -724,10 +735,7 @@ void ECU::changeState(ECUState newState) {
 			switch(newState) {											// **   And we want to switch to..  **
 				case arbit		:											// Arbitration mode? We'll see..
 					if (ourAddrCat==arbitraryConfig) {				// If we are an arbitration type..
-						ourXferList.dumpList();							// Clear out xferList, done with it.
-						ourAddrList.dumpList();							// Clear out address list for search.
-						addr = NULL_ADDR;									// We give up our address.
-						sendRequestForAddressClaim(GLOBAL_ADDR);	// Send the "where is everyone?"
+						startArbit();										// Start up arbitration.
 						ourState = arbit;									// Back in arbitration again.
 					}															//
 				break;														//
@@ -859,22 +867,24 @@ void ECU::handleAdderClaim(message* inMsg) {
 	switch(ourState) {														// Now, lets see what's what..
 		case arbit		:														// Arbitrating. (We can arbitrate then!)
 			if (inMsg->getSourceAddr()==addr) {							// Claiming our address!?
-				if (inMsg->msgIsLessThanName(this)) {					// If they win the arbitration..
-					addr = NULL_ADDR;											// We give up the address.
-				} else {															// Else, we win the name fight.
-					sendAddressClaimed(true);								// Rub in face!
-				}																	//
+				if (waitingForClaim) {										// If we are waiting for a contesting claim..
+					if (inMsg->msgIsLessThanName(this)) {				// If they win the arbitration..
+						sendAddressClaimed(false);							// Let them know, that we know, that they won.
+						addr = NULL_ADDR;										// We give up the address. This flags it for us as well.
+					} else {														// Else, we win the name fight.
+						sendAddressClaimed(true);							// Rub in face!
+					}																//
+				}																	// Otherwise, all we want is the list of addresses.
 			}																		//
 		break;																	//
 		case running	:														// Running.											
 			if (inMsg->getSourceAddr()==addr) {							// Claiming our address!?
 				if (inMsg->msgIsLessThanName(this)) {					// If they win the arbitration..
+					sendAddressClaimed(false);								// Let them know, that we know, that they won.
 					addr = NULL_ADDR;											// We give up the address.
 					if (ourAddrCat==arbitraryConfig) {					// If we do we do arbitration..
 						changeState(arbit);									// We go back to arbitration.
 					} else {														// Else, we don't do arbitration..
-						sendCannotClaimAddress();							// We send we are stuck;
-						addr = NULL_ADDR;										// Give up address.
 						changeState(addrErr);								// We go to address error state.
 					}																//
 				} else {															// Else WE WON the name game!
@@ -942,70 +952,35 @@ void ECU::clearErr(void) {
 // Calculate and start the startup time delay. Function of address.
 void ECU::startHoldTimer(void) {
 	
-	if (addr>=0 && addr <=127) startupTimer.setTime(.1); return;
-	if (addr>=248 && addr <=253) startupTimer.setTime(.1); return;
-	startupTimer.setTime(250);
+	if (addr>=0 && addr <=127) {
+		holdTimer.setTime(.1);
+		return;
+	}
+	if (addr>=248 && addr <=253) {
+		holdTimer.setTime(.1);
+		return;
+	}
+	holdTimer.setTime(250);
 }
 
-
+																				
+// arbitraryConfig
+	
 // Calculate and start the claim time delay. Random function.	
 void ECU::startClaimTimer(void) {
 
 	long	rVal;
 	
 	rVal = random(0, 256);
-	claimTimer.setTime(rVal * 0.6);
+	arbitTimer.setTime(rVal * 0.6);
 }
 
-
-																					
-// arbitraryConfig
-
-void ECU::changeArbitState(arbitState newState) {
-
-	switch(ourArbitState) {
-		case waitingForAddrs				:				// Send us your addresses and names has been called. Gather them.
-			switch(newState) {
-				case waitingForClaim		:
-					newState = waitingForClaim;
-				break;
-				case needRestartArbit	:
-					newState = needRestartArbit;
-				break;
-			}
-		case waitingForClaim				:
-			switch(newState) {
-				case waitingForAddrs		:
-					newState = waitingForAddrs;
-				break;
-				case needRestartArbit	:
-					newState = needRestartArbit;
-				break;
-			}													// Our address claim has been sent. Wait to see if it is challenged.
-		case needRestartArbit			:
-			switch(newState) {
-				case waitingForClaim		:
-					newState = waitingForClaim;
-				break;
-				case waitingForAddrs		:
-					newState = waitingForAddrs;
-				break;
-			}
-		break;
-	}
-}
-	
-	"BRAIN TIRED!!"
-	
-	
+		
 // This sends the request to inAddr to send back their name. inAdder can be specific or
 // GLOBAL_ADDR to hit everyone. The hope is that whomever called this cleared out the
 // address list. Not the end of the world if not.
 void ECU::sendRequestForAddressClaim(byte inAddr) {
-	Serial.print("sendRequestForAddressClaim(");
-	Serial.print(inAddr);
-	Serial.println(")");
-	
+
 	message	ourMsg(3);						// Create a message with 3 byte data buffer.
 	
 	ourMsg.setDataByte(0,0);				// Byte zero, gets zero.
@@ -1029,23 +1004,12 @@ void ECU::sendAddressClaimed(bool tryFail) {
 	}													// 
 	if (tryFail) {									// If we're trying..
 		ourMsg.setSourceAddr(getAddr());		// Set our address. (ACK)
-		ourMsg.setPGN(ADDR_CLAIMED);			// Set the PGN..
-		ourMsg.setPDUs(GLOBAL_ADDR);			// Then set destination address as lower bits of PGN.
-		sendMsg(&ourMsg);							// Off it goes!
-		startClaimTimer();						// Start the claim timer.
-		if (ourAddrCat==arbitraryConfig) {	// Only arbitraryConfig addressing can do this.
-			setArbitState(waitingForAddrs);	// Note we are waiting..
-		}
 	} else {											// Else we failed to get one..
 		ourMsg.setSourceAddr(NULL_ADDR);		// Set NULL address. (NACK)
-		ourMsg.setPGN(ADDR_CLAIMED);			// Set the PGN..
-		ourMsg.setPDUs(GLOBAL_ADDR);			// Then set destination address as lower bits of PGN.
-		sendMsg(&ourMsg);							// Off it goes!
-		if (ourAddrCat==arbitraryConfig) {	// Only arbitraryConfig addressing can do this.
-			setArbitState(needRestartArbit);	// Note we are in need of another..
-		} else {										// Else can't do arbitration..
-			setOurState(addrErr);				// Then we go into an error state.
-	}													
+	}													//
+	ourMsg.setPGN(ADDR_CLAIMED);				// Set the PGN..
+	ourMsg.setPDUs(GLOBAL_ADDR);				// Then set destination address as lower bits of PGN.
+	sendMsg(&ourMsg);								// Off it goes!													
 }
 
 
@@ -1067,43 +1031,96 @@ void ECU::sendCommandedAddress(byte comAddr) {
 	sendMsg(&ourMsg);								
 }
 
+
+// From whatever state we are in now, start arbitration.
+void ECU::startArbit(void) {
+
+	ourAddrList.dumpList();							// Clear out list of addresses.
+	ourXferList.dumpList();							// Clear out transfer list as well. Can't finish any.
+	sendRequestForAddressClaim(GLOBAL_ADDR);	// Start gathering addresses again.
+	arbitTimer.setTime(250);						// Set the timer.
+	ourArbitState = waitingForAddrs;				// Note that we are gathering addresses again.
+}
+
+
+// RE:ISO 11783 - Arbitators that do not have an assigned preferred address or cannot
+// claim their preferred address shall claim an address in the range of 128 to 247.
+
+// Ok, we need an address. Go through the allowed list checking with our generated list of
+// claimed addresses. If you can't find a value? Grab it as our own and pass it back! If
+// we find ALL of them? Pass back a NULL_ADDR as a fail.
+byte ECU::chooseAddr(void) {
+
+	int i;
+	
+	for(i=128;i<248;i++) {
+		if (!ourAddrList.findAddr(i)) {
+			return i;
+		}
+	}
+	return NULL_ADDR;
+}
+
+
+// Arbitration is all about timers. That and adress lists..
+void ECU::checkArbit(void) {
+	
+	if (ourArbitState==waitingForAddrs) {			// If gathering addresses..
+		if (arbitTimer.ding()) {						// If gathering's over..
+			arbitTimer.reset();							// Shut off the timer.
+			ourAddrList.showList();						// Well let's see 'em. DEBUGGING
+			addr = chooseAddr();							// Choose an address.
+			if (addr!=NULL_ADDR) {						// If we found an unclaimed one..
+				sendAddressClaimed(true);				// Send address claim on new address.
+				startClaimTimer();						// Start the claim timer.
+				ourArbitState = waitingForClaim;		// And we wait..
+			} else {											// Else ALL are claimed..
+				changeState(addrErr);					// We have failed.
+			}
+		}														//
+	}															//
+	else if (ourArbitState==waitingForClaim) {	// Waiting to see if our address claim is challenged.
+		if (arbitTimer.ding()) {						// If waiting for challenge is over..
+			sendAddressClaimed(false);				// Let the winner know, that we know, that they won.
+			if (addr==NULL_ADDR) {						// If we are back to NULL_ADDR, we were challenged and lost!
+				startArbit();								// We start all over again.
+			} else {											// Else, we have a unchallenged address!
+				changeState(running);					// Whoo hoo! Go to running state.
+			}
+		}
+	}
+}
+
 		
-// See if any CA's need to output messages of their own. Or other chores we know nothing
-// about.
+// Deal with timers, See if any CA's need to output messages of their own. Or other chores
+// we know nothing about.
 void ECU::idle(void) {
 
 	CA*			trace;
 	
 	switch(ourState) {
-		case config		:								// We're in config state. Time to start up!
-			setState(startHold);						// First pass through idle in config state. Start holding.
+		case config		:									// We're in config state. Time to start up!
+			changeState(startHold);						// First pass through idle in config state. Start holding.
 		break;
-		case startHold	:								// In startHold state.
-			if (startHoldTimer.ding()) {
-				startHoldTimer.reset();
-				if (ourAddrCat==) {
-					changeState(arbit);
-				} else {
-					changeState(running);
-				}
-			}
-		break;
-		case arbit		:								// In arbitration state.
-			switch(ourArbitState) {
-				case waitingForAddrs	: checkAddrList();														// Send us your addresses and names has been called. Gather them.
-				case waitingForClaim	: checkClaimTimer();														// Our address claim has been sent. Wait to see if it is challenged.
-				case needRestartArbit	: 
-					sendRequestForAddressClaim(GLOBAL_ADDR);
-					set
-		
-		case running	:								// We're in running state. Let the CAs have some runtime.
-			trace = (CA*)getFirst();				// Well start at the beginning and let 'em all have a go.
-			while(trace) {								// While we got something..
-				trace->idleTime();					// Give 'em some time to do things.
-				trace = (CA*)trace->getNext();	// Grab the next one.
-			}												//
-		break;											//
-		case addrErr	:					break;	// Address err? Basically do nothing.
+		case startHold	:									// In startHold state.
+			if (holdTimer.ding()) {						// If the time is up..
+				holdTimer.reset();						// Shut off the timer.
+				if (ourAddrCat==arbitraryConfig) {	// If we do arbitration..
+					changeState(arbit);					// Slide into arbitration gear.
+				} else {										// Else, we don't do arbitration?
+					changeState(running);				// Then we start running.
+				}												//
+			}													//
+		break;												//
+		case arbit		:	checkArbit();	break;	// In arbitration state. We check what's up.
+		case running	:									// We're in running state. Let the CAs have some runtime.
+			trace = (CA*)getFirst();					// Well start at the beginning and let 'em all have a go.
+			while(trace) {									// While we got something..
+				trace->idleTime();						// Give 'em some time to do things.
+				trace = (CA*)trace->getNext();		// Grab the next one.
+			}													//
+		break;												//
+		default			:						break;	// Anything else? Basically do nothing.
 	}		
 }
 

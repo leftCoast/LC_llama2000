@@ -352,6 +352,7 @@ public:
 	
 				addrNode*	findAddr(byte inAddr);
 	virtual	void			addAddr(byte inAddr);
+				void			showList(void);
 };
 
 
@@ -419,65 +420,59 @@ class ECU :	public linkList,
 				
 	virtual  void		sendMsg(message* outMsg)=0;									// You have to fill this one out.
 	virtual  void		handleMsg(message* inMsg);										// When a message comes in, pass it into here.
-				bool		isReqAddrClaim(message* inMsg);								// Is this a request for address claimed msg?
-				bool		isAddrClaim(message* inMsg);									// Is this an address claimed msg?
-				bool		isCantClaim(message* inMsg);									// Is this a fail to claim address msg?
-				bool		isCommandedAddr(message* inMsg);								// Is this a commanded address msg?
-				void		handleReqAdderClaim(message* inMsg);						// Handle a request for address claimed msg.
-				void		handleAdderClaim(message* inMsg);							// Handle an address claimed msg.
-				void		handleCantClaim(message* inMsg);								// Handle a failed to claim an address msg.				
-				void		handleComAddr(message* inMsg);								// Handle a commanded address message.
+				
 				void		setAddrCat(addrCat inAddrCat);								// How we deal with addressing.
 				addrCat	getAddrCat(void);													// See how we deal with addressing.
 				byte		getAddr(void);														// Here's our current address.
 				void		setAddr(byte inAddr);											// Set a new address.
 				
 				// What in the world is going on in there? The "ourState" variable can give a hint.
-	virtual	void		begin(ECUname* inName,byte inAddr,addrCat inAddCat);	// Initial setup.
-				void		startHoldTimer(void);											// Calculate and start the address holding time delay. Function of address.
-				void		clearErr(void);													// This will clear the address error and restart the process.
-				void		changeState(ECUState newState);								// Keeping track of what we are up to.
-				
 				enum		ECUState {
-					
 					config,																		// Still on the bench being assembled.
-					startHold,																	// Certain addresses call for a start hold.
+					startHold,																	// Certain addresses call for a start hold before beginning.
 					arbit,																		// Doing address arbitration.
 					addrErr,																		// Had an address error that we can't fix alone.
 					running																		// Everything seems fine. We're running.
 				};
 				ECUState	ourState;
 				timeObj	holdTimer;
+	virtual	void		begin(ECUname* inName,byte inAddr,addrCat inAddCat);	// Initial setup.
+				void		startHoldTimer(void);											// Calculate and start the address holding time delay. Function of address.
+				void		clearErr(void);													// This will clear the address error and restart the process.
+				void		changeState(ECUState newState);								// Keeping track of what we are up to.
+				void		stateName(ECUState aState);									// state -> "state" kinda' thing for debugging.
 														
 				// arbitraryConfig
-				// Arbitration has a couple sub states.
+				// Arbitration has a couple wait states.
 				enum		arbitState {
-				
 					waitingForAddrs,															// Send us your addresses and names has been called. Gather them.
 					waitingForClaim,															// Our address claim has been sent. Wait to see if it is challenged.
-					needRestartArbit
 				};	
-				
-				void		changeArbitState(arbitState newState);						// Shift gears!
-				void		sendRequestForAddressClaim(byte inAddr);					// Tell us your name and address.
-				void		sendAddressClaimed(bool tryFail=true);						// This is our name and address.
-				void		sendCannotClaimAddress(void);									// We can't find an address!
-				void		sendCommandedAddress(byte comAddr);							// HEY YOU! Set this as your address!
-				
-				
-					
 				arbitState	ourArbitState;
 				timeObj		arbitTimer;
+				addrList		ourAddrList;
+				bool			isReqAddrClaim(message* inMsg);							// Is this a request for address claimed msg?
+				bool			isAddrClaim(message* inMsg);								// Is this an address claimed msg?
+				bool			isCantClaim(message* inMsg);								// Is this a fail to claim address msg?
+				bool			isCommandedAddr(message* inMsg);							// Is this a commanded address msg?
+				void			handleReqAdderClaim(message* inMsg);					// Handle a request for address claimed msg.
+				void			handleAdderClaim(message* inMsg);						// Handle an address claimed msg.
+				void			handleCantClaim(message* inMsg);							// Handle a failed to claim an address msg.				
+				void			handleComAddr(message* inMsg);							// Handle a commanded address message.
 				void			startClaimTimer(void);										// Calculate and start the claim time delay. Random function.
+				void			startArbit(void);												// From whatever state we are in now, start arbitration.
+				byte			chooseAddr(void);												// We have a list of claimed addresses and a range of allowed addresses. Find one.
+				void			checkArbit(void);												// Arbitration is all about wait states.
+				void			sendRequestForAddressClaim(byte inAddr);				// Tell us your name and address.
+				void			sendAddressClaimed(bool tryFail=true);					// This is our name and address.
+				void			sendCannotClaimAddress(void);								// We can't find an address!
+				void			sendCommandedAddress(byte comAddr);						// HEY YOU! Set this as your address!
 				
 	virtual	void		idle(void);
 	
 				addrCat	ourAddrCat;
 				byte		addr;
-				addrList	ourAddrList;
 				xferList	ourXferList;
-				
-				
 };
 
 
