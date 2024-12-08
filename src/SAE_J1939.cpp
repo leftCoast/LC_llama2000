@@ -3,6 +3,12 @@
 
 //				----- message class -----
 
+
+bool	isBlank(uint8_t inVal)  { return inVal==0xFF; }
+bool	isBlank(uint16_t inVal) { return inVal==0xFFFF; }
+bool	isBlank(uint32_t inVal) { return inVal==0xFFFFFFFF; }
+
+
 byte dataCopy[8];
 
 
@@ -17,6 +23,23 @@ message::message(int inNumBytes) {
 		numBytes		= 0;					// Because now, it is.
 		msgData		= NULL;				// Default so we can use resizeBuff().
 		setNumBytes(inNumBytes);		// Set the default size.
+}
+
+
+message::message(message* inMsg) {
+
+	numBytes		= 0;										// Because now, it is.
+	msgData = NULL;										// Default so we can use resizeBuff().
+	setNumBytes(inMsg->getNumBytes());				// Set the default size.
+	for (int i=0;i<numBytes;i++) {
+		setDataByte(i,inMsg->getDataByte(i));
+	}	
+	setPriority(inMsg->getPriority());
+	setR(inMsg->getR());
+	setDP(inMsg->getDP());
+	setPDUf(inMsg->getPDUf());
+	setPDUs(inMsg->getPDUs());
+	setSourceAddr(inMsg->getSourceAddr());
 }
 
 
@@ -155,7 +178,7 @@ bool message::msgIsLessThanName(ECUname* inName) {
 
 
 void message::showMessage(void) {
-
+	
 	Serial.print("PGN           : "); Serial.println(getPGN(),HEX);
 	Serial.print("Priority      : "); Serial.println(priority);
 	Serial.print("Reserve bit   : "); Serial.println(R);
@@ -516,7 +539,9 @@ addrNode* addrList::findAddr(byte inAddr) {
 	
 	trace = (addrNode*) getFirst();
 	while(trace) {
-		if (trace->addr==inAddr) return trace;
+		if (trace->addr==inAddr) {
+			return trace;
+		}
 		trace = (addrNode*) trace->getNext();
 	}
 	return trace;
@@ -530,7 +555,9 @@ void addrList::addAddr(byte inAddr) {
 	
 	if (findAddr(inAddr)==NULL) {
 		newNode = new addrNode(inAddr);
-		if (newNode) addToTop(newNode);
+		if (newNode) {
+			addToTop(newNode);
+		}
 	}
 }
 
@@ -639,6 +666,25 @@ void  xferList::idle(void) {
 
 
 
+//				----- mesgQ. Hold 'em in here. -----
+
+
+
+msgObj::msgObj(message* inMsg)
+	: linkListObj(),
+	message(inMsg) {  }
+
+
+msgObj::~msgObj(void) { }					
+					
+
+mesgQ::mesgQ(void) {  }
+
+
+mesgQ::~mesgQ(void) {  }
+
+
+
 //				----- ECU Electronic control unit. -----
 
 
@@ -667,6 +713,13 @@ void ECU::begin(ECUname* inName,byte inAddr,addrCat inAddCat) {
 }
 
 
+// Add the handlers (CAs) of the messages you would like to send/receive.
+void ECU::addMsgHandler(CA* inCA) {
+
+	addToTop(inCA);	// Hope it's a good one. NULL pointer will be filtered out.
+}
+
+
 void ECU::stateName(ECUState aState) {
 	
 	switch(aState) {
@@ -682,12 +735,6 @@ void ECU::stateName(ECUState aState) {
 // We need to change states. This is kinda' the flowchart of the program. What steps do we
 // do, if even possible, to get from one state to another? List 'em here.
 void ECU::changeState(ECUState newState) {
-
-	Serial.print("*** State change from ");
-	stateName(ourState);
-	Serial.print(" to ");
-	stateName(newState);
-	Serial.println(" with result of.. ");
 	
 	switch(ourState) {
 		case config		:													// **    We are in config state     **
@@ -753,64 +800,75 @@ void ECU::changeState(ECUState newState) {
 		break;																//
 		default					:								break;	// Other states will be switch elsewhere.
 	}
-	Serial.print("*** ");
-	stateName(ourState);
-	Serial.println();
 }
 
 void msgOut(message* inMsg) {
 	
-	Serial.println("-------------------------");
-	inMsg->showMessage();
-	Serial.println();
-	Serial.println();
+	if (inMsg->getSourceAddr()!=35) {
+		Serial.println("-------------------------");
+		inMsg->showMessage();
+		Serial.println();
+		Serial.println();
+	}
 }
 
 
 // We are passed in a message to handle. (From our progeny, or ourselves, if assembled.)
-// First  we see if it's a network task that we have to handle ourselves. Then, if not, we
-// ask each the CAs if one of them can handl it. Once a CA handles it, or none will. We
-// are done.
+// Copy it and stuff it in the Q for later.
 void ECU::handleMsg(message* inMsg) {
 
-	CA*	trace;
-	bool	done;
+	msgObj*	newMsg;
 	
-	msgOut(inMsg);
-	if (isReqAddrClaim(inMsg)) {
-		Serial.println("Is REQ Claim");
-		handleReqAdderClaim(inMsg);
+	if (inMsg) {
+		newMsg = new msgObj(inMsg);
+		if (newMsg) {
+			ourMsgQ.push(newMsg);
+		}
 	}
-	else if (isAddrClaim(inMsg)) {
-		Serial.println("Is addr Claim");
-		handleAdderClaim(inMsg);
-	}
-	else if (isCantClaim(inMsg)) {
-		Serial.println("Is CAN'T Claim");
-		handleCantClaim(inMsg);
-	}
-	else if (isCommandedAddr(inMsg)) {
-		Serial.println("Is COMMAND addr");
-		handleComAddr(inMsg);
-	}
-	else {
-		Serial.println("All returned false.");
-		if (ourState==running) {
-			
-			done = false;
-			trace = (CA*)getFirst();
-			while(!done) {
-				if (trace) {
-					if (trace->handleMsg(inMsg)) {
-						done = true;
+}
+
+	
+// First  we see if it's a network task that we have to handle ourselves. Then, if not, we
+// ask each the CAs if one of them can handle it. Once a CA handles it, or none will. We
+// are done.	
+void ECU::checkMessages(void) {
+
+	msgObj*	aMsg;
+	CA*		trace;
+	bool		done;
+	
+	aMsg = (msgObj*)ourMsgQ.pop();
+	if (aMsg) {
+		if (isReqAddrClaim(aMsg)) {
+			handleReqAdderClaim(aMsg);
+		}
+		else if (isAddrClaim(aMsg)) {
+			handleAdderClaim(aMsg);
+		}
+		else if (isCantClaim(aMsg)) {
+			handleCantClaim(aMsg);
+		}
+		else if (isCommandedAddr(aMsg)) {
+			handleComAddr(aMsg);
+		}
+		else {
+			if (ourState==running) {
+				done = false;
+				trace = (CA*)getFirst();
+				while(!done) {
+					if (trace) {
+						if (trace->handleMsg(aMsg)) {
+							done = true;
+						} else {
+							trace = (CA*)trace->getNext();
+						}
 					} else {
-						trace = (CA*)trace->getNext();
+						done = true;
 					}
-				} else {
-					done = true;
 				}
 			}
 		}
+		delete(aMsg);
 	}
 }
 
@@ -819,7 +877,6 @@ void ECU::handleMsg(message* inMsg) {
 // and what address they are holding at this moment.
 bool ECU::isReqAddrClaim(message* inMsg) {
 	
-	Serial.println("isReqAddrClaim?");
 	if (inMsg->getPDUf()==REQ_ADDR_CLAIM_PF && inMsg->getNumBytes()==3) {
 		return true;
 	}
@@ -831,7 +888,6 @@ bool ECU::isReqAddrClaim(message* inMsg) {
 // to use. If this conflicts with yours? Deal with that.
 bool ECU::isAddrClaim(message* inMsg) {
 	
-	Serial.println("isAddrClaim?");
 	if (inMsg->getPDUf()==ADDR_CLAIMED_PF && inMsg->getPDUs()==GLOBAL_ADDR && inMsg->getNumBytes()==8) {
 		return true;
 	}
@@ -842,7 +898,6 @@ bool ECU::isAddrClaim(message* inMsg) {
 // Someone is telling the network that they can not claim an address at all.
 bool ECU::isCantClaim(message* inMsg) {
 	
-	Serial.println("isCantClaim?");
 	if (inMsg->getPDUf()==ADDR_CLAIMED_PF && inMsg->getPDUs()==GLOBAL_ADDR && inMsg->getSourceAddr()==NULL_ADDR && inMsg->getNumBytes()==8) {
 		return true;
 	}
@@ -858,7 +913,7 @@ bool ECU::isCommandedAddr(message* inMsg) {
 }
 
 
-// We have a new message asking us or everyone what address we are and what our name is.
+// We have a new message asking us, or everyone, what address we are and what our name is.
 void ECU::handleReqAdderClaim(message* inMsg) {
 	
 	switch(ourState) {
@@ -881,18 +936,16 @@ void ECU::handleReqAdderClaim(message* inMsg) {
 // We have a message telling us that someone claimed an address. Let's see if it's our
 // address they claimed. If so? We can send back and address claimed?
 void ECU::handleAdderClaim(message* inMsg) {
-	Serial.println("***** ADDRESS CLAIM *****");
+
 	ourAddrList.addAddr(inMsg->getSourceAddr());						// In all cases we add this address to our list.
 	switch(ourState) {														// Now, lets see what's what..
 		case arbit		:														// Arbitrating. (We can arbitrate then!)
 			if (inMsg->getSourceAddr()==addr) {							// Claiming our address!?
 				if (waitingForClaim) {										// If we are waiting for a contesting claim..
 					if (inMsg->msgIsLessThanName(this)) {				// If they win the arbitration..
-						Serial.println("***** WE LOOSE ADDRESS CLAIM *****");
 						sendAddressClaimed(false);							// Let them know, that we know, that they won.
 						addr = NULL_ADDR;										// We give up the address. This flags it for us as well.
 					} else {														// Else, we win the name fight.
-						Serial.println("***** WE WIN ADDRESS CLAIM *****");
 						sendAddressClaimed(true);							// Rub in face!
 					}																//
 				}																	// Otherwise, all we want is the list of addresses.
@@ -960,6 +1013,7 @@ byte ECU::getAddr(void) { return addr; }
 
 // Fine, our address is now inAddr.
 void ECU::setAddr(byte inAddr) { addr		= inAddr; }
+
 
 // Assuming that in some way YOU fixed the error. This will clear the address error and
 // restart the process. By YOU I mean let's say you had an address collision? YOU set a
@@ -1056,17 +1110,17 @@ void ECU::sendCommandedAddress(byte comAddr) {
 // From whatever state we are in now, start arbitration.
 void ECU::startArbit(void) {
 	
-	Serial.println("**** startArbit() ****");
+	//Serial.println("**** startArbit() ****");
 	
 	if (addr==NULL_ADDR) {								// If we have no current address..
-		Serial.println("**** No Addr, start a list.. ****");
+		//Serial.println("**** No Addr, start a list.. ****");
 		ourAddrList.dumpList();							// Clear out list of addresses.
 		ourXferList.dumpList();							// Clear out transfer list as well. Can't finish any.
 		sendRequestForAddressClaim(GLOBAL_ADDR);	// Start gathering addresses again.
 		arbitTimer.setTime(250);						// Set the timer.
 		ourArbitState = waitingForAddrs;				// Note that we are gathering addresses again.
 	} else {													// Else we DO have an address..
-		Serial.println("**** Have Addr, see if it works. ****");
+		//Serial.println("**** Have Addr, see if it works. ****");
 		sendAddressClaimed();							// See if we can claim what we got.
 		arbitTimer.setTime(250);						// Set the timer.
 		ourArbitState=waitingForClaim;
@@ -1100,9 +1154,6 @@ void ECU::checkArbit(void) {
 			arbitTimer.reset();							// Shut off the timer.
 			ourAddrList.showList();						// Well let's see 'em. DEBUGGING
 			addr = chooseAddr();							// Choose an address using the list to compare.
-			Serial.print("***** CHOOSING NEW ADDRESS : ");
-			Serial.print(addr);
-			Serial.println(" *****");
 			if (addr!=NULL_ADDR) {						// If we found an unclaimed one..
 				sendAddressClaimed(true);				// Send address claim on new address.
 				startClaimTimer();						// Start the claim timer.
@@ -1117,7 +1168,6 @@ void ECU::checkArbit(void) {
 			if (addr==NULL_ADDR) {						// If we are back to NULL_ADDR, we were challenged and lost!
 				startArbit();								// We start all over again.
 			} else {											// Else, we have a unchallenged address!
-				Serial.println("***** SUCCESS! No one wanted the new address! *****");
 				changeState(running);					// Whoo hoo! Go to running state.
 			}
 		}
@@ -1145,8 +1195,12 @@ void ECU::idle(void) {
 				}												//
 			}													//
 		break;												//
-		case arbit		:	checkArbit();	break;	// In arbitration state. We check what's up.
+		case arbit		:									// In arbitration state. We'll check what's up.
+			checkMessages();								// First see if there's a message waiting for us.
+			checkArbit();									// Then check the state of our arbitration.
+		break;												//
 		case running	:									// We're in running state. Let the CAs have some runtime.
+			checkMessages();								// First see if there's a message waiting for us.
 			trace = (CA*)getFirst();					// Well start at the beginning and let 'em all have a go.
 			while(trace) {									// While we got something..
 				trace->idleTime();						// Give 'em some time to do things.

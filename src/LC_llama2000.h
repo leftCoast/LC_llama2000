@@ -4,6 +4,7 @@
 
 #include <idlers.h>
 #include <mapper.h>
+#include <runningAvg.h>
 #include <CAN.h>
 #include <SAE_J1939.h>
 
@@ -11,17 +12,8 @@
 #define DEF_2515_RST_PIN   8
 #define DEF_2515_INT_PIN   2
 
-/*
-Basically what are called parameter group numbers. Or PGN(s)
 
-waterSpeed,  // 0x1F503
-waterDepth,  // 0x1F50B
-waterTemp,   // 0x1FD08
-fluidLevel   // 0x1F211
-*/
-
-
-class CANMsgObj;
+class msgHandler;
 
 
 // ************ llama2000 ************
@@ -55,8 +47,6 @@ class llama2000 :   public ECU {
             ~llama2000(void);
 
 	virtual  bool        begin(int inCSPin);
-            bool        addMsgObj(uint32_t inPGN);
-            CANMsgObj*  getMsgObj(uint32_t inPGN);
 	virtual  void			sendMsg(message* outMsg);
 	virtual	void			recieveMsg(void);
    virtual	void			idle(void);
@@ -67,20 +57,18 @@ class llama2000 :   public ECU {
 
 
 
-// ************* CANMsgObj *************
+// ************* msgHandler *************
+//    These are the message handlers.
+// *************************************
 
-
-class CANMsgObj : public CA {
+class msgHandler : public CA {
 
    public:
-            CANMsgObj(ECU* inECU);
-            ~CANMsgObj(void);
-
-            uint32_t getPGN(void);
+            msgHandler(ECU* inECU);
+            ~msgHandler(void);
             
    virtual  void	sendMsg(message* outMsg);
             
-            uint32_t	ourPGN;
 };
 
 
@@ -88,7 +76,7 @@ class CANMsgObj : public CA {
 // ************* waterSpeedObj *************
 
 
-class waterSpeedObj  : public CANMsgObj {
+class waterSpeedObj  : public msgHandler {
 
    public:
 				waterSpeedObj(ECU* inECU);
@@ -106,7 +94,7 @@ class waterSpeedObj  : public CANMsgObj {
 // ************* waterDepthObj *************
 
 
-class waterDepthObj  : public CANMsgObj {
+class waterDepthObj  : public msgHandler {
 
    public:
 				waterDepthObj(ECU* inECU);
@@ -114,7 +102,6 @@ class waterDepthObj  : public CANMsgObj {
           
             float getDepth(void);
 	virtual	bool  handleMsg(message* inMsg);
-  
   
             float feet;
           
@@ -124,7 +111,7 @@ class waterDepthObj  : public CANMsgObj {
 // ************* waterTempObj *************
 
 
-class waterTempObj  : public CANMsgObj {
+class waterTempObj  : public msgHandler {
 
    public:
             waterTempObj(ECU* inECU);
@@ -150,7 +137,7 @@ enum tankType {
 };
 
 
-class fluidLevelObj  : public CANMsgObj {
+class fluidLevelObj  : public msgHandler {
 
    public:
             fluidLevelObj(ECU* inECU);
@@ -168,6 +155,27 @@ class fluidLevelObj  : public CANMsgObj {
             float    level;
             float    capacity;
             int      tankID;
+};
+
+
+
+// ************* airTempBarometer *************
+
+//runningAvg inHgSmooth(6);
+
+class airTempBarometer  : public msgHandler {
+
+   public:
+            airTempBarometer(ECU* inECU);
+            ~airTempBarometer(void);
+          
+   virtual  bool  handleMsg(message* inMsg);
+   			float getAirTemp(void);
+   			float getInHg(void);
+   
+   			float   		degF;
+   			runningAvg*	inHgSmooth;
+            float   		inHg;
 };
 
 

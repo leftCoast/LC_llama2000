@@ -33,6 +33,14 @@ class ECUname;
 
 //				----- message -----
 
+
+// Typically unused/filled data bytes are set to 0xFF.
+
+bool	isBlank(uint8_t inVal);
+bool	isBlank(uint16_t inVal);
+bool	isBlank(uint32_t inVal);
+
+
 // Decoding the 29 bit CAN/J1939 header.
 struct msgHeader {
 	uint32_t  PGN;				// Type of data (Parameter group number)
@@ -49,6 +57,8 @@ class message {
 
 	public:
 				message(int inNumBytes=DEF_NUM_BYTES);
+				message(message* inMsg);
+
 	virtual	~message(void);
 	
 				void		setNumBytes(int inNumBytes);
@@ -392,6 +402,25 @@ public:
 
 
 
+//				----- mesgQ. Get 'em and hold 'em in here. -----
+
+
+class msgObj :	public linkListObj,
+					public message {
+	public:
+				msgObj(message* inMsg);
+	virtual	~msgObj(void);
+};					
+					
+
+class mesgQ :	public queue {
+
+public:
+				mesgQ(void);
+	virtual	~mesgQ(void);
+};
+
+
 //				----- ECU Electronic control unit. -----
 
 
@@ -406,7 +435,7 @@ enum addrCat {
 	noAddress			// We have no address, just a listener, or broadcaster.
 };
 
-
+class CA;
 
 class ECU :	public linkList,
 				public idler,
@@ -417,9 +446,13 @@ class ECU :	public linkList,
 	virtual	~ECU(void);
 		
 	
-				
+	virtual	void		begin(ECUname* inName,byte inAddr,addrCat inAddCat);	// Initial setup.
+	virtual	void		addMsgHandler(CA* inCA);										// Add the handlers of the messages you would like to send/receive.
+	
 	virtual  void		sendMsg(message* outMsg)=0;									// You have to fill this one out.
 	virtual  void		handleMsg(message* inMsg);										// When a message comes in, pass it into here.
+				void		checkMessages(void);												// If we have one we'll grab it and dela with it.
+				mesgQ		ourMsgQ;																// A place to store incoming messages.
 				
 				void		setAddrCat(addrCat inAddrCat);								// How we deal with addressing.
 				addrCat	getAddrCat(void);													// See how we deal with addressing.
@@ -436,7 +469,7 @@ class ECU :	public linkList,
 				};
 				ECUState	ourState;
 				timeObj	holdTimer;
-	virtual	void		begin(ECUname* inName,byte inAddr,addrCat inAddCat);	// Initial setup.
+	
 				void		startHoldTimer(void);											// Calculate and start the address holding time delay. Function of address.
 				void		clearErr(void);													// This will clear the address error and restart the process.
 				void		changeState(ECUState newState);								// Keeping track of what we are up to.
@@ -468,7 +501,7 @@ class ECU :	public linkList,
 				void			sendCannotClaimAddress(void);								// We can't find an address!
 				void			sendCommandedAddress(byte comAddr);						// HEY YOU! Set this as your address!
 				
-	virtual	void		idle(void);
+	virtual	void			idle(void);
 	
 				addrCat	ourAddrCat;
 				byte		addr;

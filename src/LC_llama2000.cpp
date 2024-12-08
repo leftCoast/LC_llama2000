@@ -19,7 +19,7 @@ int pack16(byte hiByte,int lowByte) {
    return(value);
 }
 
-int pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
+uint32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
   
    struct int32 {
       byte byte0;
@@ -38,21 +38,6 @@ int pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
    bytes->byte0 = lowByte;
    return(value);
 }
-
-
-CANMsgObj* createMsgObj(ECU* inECU,uint32_t PGN) {
-
-	switch(PGN) {
-      
-      case 0x1F503	: return (CANMsgObj*) new waterSpeedObj(inECU);
-      case 0x1F50B   : return (CANMsgObj*) new waterDepthObj(inECU);
-      case 0x1FD08	: return (CANMsgObj*) new waterTempObj(inECU);
-      case 0x1F211   : return (CANMsgObj*) new fluidLevelObj(inECU);
-      default			: return NULL;
-   }
-   return NULL;
-}
-
 
 
 // ************ llama_NMEA2000 ************
@@ -80,7 +65,7 @@ bool llama2000::begin(int inCSPin) {
 	aName.setVehSys(DEV_CLASS_INST);						//	We are an instrument.
 	aName.setSystemInst(0);									// We are the first of our device class.
 	aName.setIndGroup(Marine);								// What kind of machine are we ridin' on?
-	ECU::begin(&aName,35,arbitraryConfig);			// Here's our name, default address and address category.													
+	ECU::begin(&aName,45,arbitraryConfig);				// Here's our name, default address and address category.													
 	pinMode(resetPin, OUTPUT);								// Setup our reset pin.
 	delay(50);													// Sit for a bit..
 	digitalWrite(resetPin, LOW);							// Set reset low.
@@ -91,46 +76,17 @@ bool llama2000::begin(int inCSPin) {
 }
 
 
-CANMsgObj* llama2000::getMsgObj(uint32_t inPGN) {
-
-  CANMsgObj* trace;
-  
-  trace = (CANMsgObj*)getFirst();
-  while(trace) {
-    if (trace->getPGN()==inPGN) {
-      return trace;
-    }
-    trace = (CANMsgObj*)trace->getNext();
-  }
-  return NULL;
-}
-
-
-bool llama2000::addMsgObj(uint32_t inPGN) {
-
-   CANMsgObj* newMsgObj;
-  
-   if (!getMsgObj(inPGN)) {
-      newMsgObj = createMsgObj(this,inPGN);
-      if (!newMsgObj) {
-          return false;
-      } else {
-         addToTop(newMsgObj);
-      }
-   }
-   return true;
-}
-
-
 void llama2000::sendMsg(message* outMsg) {
 	
    uint32_t CANID;
    int		numBytes;
    
+   /*
    Serial.println("Sending..");
    outMsg->showMessage();
    Serial.println();
    Serial.println();
+   */
    
    if (outMsg) {
 		CANID = outMsg->getCANID();
@@ -157,7 +113,7 @@ void llama2000::recieveMsg(void) {
 			newMsg.setDataByte(i,CAN.read());					// Read and store the byte into the message.
 			i++;															// Bump of the storage index.
 		}																	//
-		handleMsg(&newMsg);											// All stored, the ECU deal with it.
+		handleMsg(&newMsg);											// All stored, let our ECU deal with it.
 	}
 }
 
@@ -168,20 +124,17 @@ void llama2000::idle(void) {
 	recieveMsg();
 }
 
-// ************* CANMsgObj *************
+// ************* msgHandler *************
 
 
-CANMsgObj::CANMsgObj(ECU* inECU)
+msgHandler::msgHandler(ECU* inECU)
    : CA(inECU) { }
 
 
-CANMsgObj::~CANMsgObj(void) { }
+msgHandler::~msgHandler(void) { }
 
 
-uint32_t CANMsgObj::getPGN(void) { return ourPGN; }
-
-
-void CANMsgObj::sendMsg(message* outMsg) {
+void msgHandler::sendMsg(message* outMsg) {
 
 	if (ourECU) {
 		ourECU->sendMsg(outMsg);
@@ -194,9 +147,8 @@ void CANMsgObj::sendMsg(message* outMsg) {
 
 
 waterSpeedObj::waterSpeedObj(ECU* inECU)
-   : CANMsgObj(inECU) {
+   : msgHandler(inECU) {
 
-  ourPGN  = 0x1F503;
   knots   = 0;
   speedMap.setValues(0,1023,0,(1023*1.943844)*0.01);
 }
@@ -209,9 +161,12 @@ bool waterSpeedObj::handleMsg(message* inMsg) {
 
   unsigned int rawSpeed;
   
-  rawSpeed = (unsigned int) pack16(inMsg->getDataByte(2),inMsg->getDataByte(1));
-  knots = speedMap.map(rawSpeed);
-  return true;
+  if (inMsg->getPGN()==0x1F503) {
+  	rawSpeed = (unsigned int) pack16(inMsg->getDataByte(2),inMsg->getDataByte(1));
+  	knots = speedMap.map(rawSpeed);
+  	return true;
+  }
+  return false;
 }
 
   
@@ -223,7 +178,7 @@ float waterSpeedObj::getSpeed(void) { return knots; }
 
 
 waterDepthObj::waterDepthObj(ECU* inECU)
-   : CANMsgObj(inECU) {
+   : msgHandler(inECU) {
 
   ourPGN  = 0x1F50B;
   feet   = 0;
@@ -235,12 +190,14 @@ waterDepthObj::~waterDepthObj(void) {  }
 
 bool waterDepthObj::handleMsg(message* inMsg) {
 
-  unsigned int rawDepth;
-
-  rawDepth = (unsigned int) pack32(inMsg->getDataByte(4),inMsg->getDataByte(3),inMsg->getDataByte(2),inMsg->getDataByte(1));
-  rawDepth = rawDepth / 100.0;		// Give meters.
-  feet = rawDepth * 3.28084;			// Give feet
-  return true;
+	unsigned int rawDepth;
+	if (inMsg->getPGN()==0x1F50B) {
+		rawDepth = (unsigned int) pack32(inMsg->getDataByte(4),inMsg->getDataByte(3),inMsg->getDataByte(2),inMsg->getDataByte(1));
+		rawDepth = rawDepth / 100.0;		// Give meters.
+		feet = rawDepth * 3.28084;			// Give feet
+		return true;
+	}
+	return false;
 }
 
   
@@ -252,7 +209,7 @@ float waterDepthObj::getDepth(void) { return feet; }
 
 
 waterTempObj::waterTempObj(ECU* inECU)
-   : CANMsgObj(inECU) {
+   : msgHandler(inECU) {
 
    ourPGN   = 0x1FD08;
    degF     = 0;
@@ -266,10 +223,13 @@ bool waterTempObj::handleMsg(message* inMsg) {
 
    unsigned int rawTemp;
 
-   rawTemp  = (unsigned int) pack16(inMsg->getDataByte(4),inMsg->getDataByte(3));
-   degF  = rawTemp / 100.0;         // Give kelvan.
-   degF  = (degF * 1.8) - 459.67;   // Give degF.
-   return true;
+	if (inMsg->getPGN()==0x1FD08) {
+   	rawTemp  = (unsigned int) pack16(inMsg->getDataByte(4),inMsg->getDataByte(3));
+   	degF  = rawTemp / 100.0;         // Give kelvan.
+   	degF  = (degF * 1.8) - 459.67;   // Give degF.
+   	return true;
+   }
+   return false;
 }
 
   
@@ -280,7 +240,7 @@ float waterTempObj::getTemp(void) { return degF; }
 
 
  fluidLevelObj::fluidLevelObj(ECU* inECU) 
-   : CANMsgObj(inECU) {
+   : msgHandler(inECU) {
    
    ourPGN		= 0x1F211;
 	fluidType	= fuel;  // This is 0.
@@ -343,5 +303,66 @@ void fluidLevelObj::sendMsg(void) {
    aByte = 0xFF; 
    outMsg.setDataByte(7,aByte);                           // Reserved, so..
    
-   CANMsgObj::sendMsg(&outMsg);
+   msgHandler::sendMsg(&outMsg);
 }
+
+
+// ************* airTempBarometer *************
+
+
+airTempBarometer::airTempBarometer(ECU* inECU)
+   : msgHandler(inECU) {
+
+   degF	= 0;
+   inHg	= 0;
+   inHgSmooth = new runningAvg(6);
+   if (inHgSmooth) {
+   	Serial.println("Got a smoother.");
+
+   } else {
+   	Serial.println("No Smoother!");
+   }
+}
+
+
+airTempBarometer::~airTempBarometer(void) { if (inHgSmooth) delete inHgSmooth; }
+
+
+bool airTempBarometer::handleMsg(message* inMsg) {
+
+   uint32_t	rawPa32;
+   uint16_t	rawPa16;
+   float		Pa;
+	bool		success;
+	
+	success = false;
+	if (inMsg->getPGN()==0x1FD0A) {
+   	rawPa32  = pack32(inMsg->getDataByte(6),inMsg->getDataByte(5),inMsg->getDataByte(4),inMsg->getDataByte(3));
+   	if (!isBlank(rawPa32)) {
+   		Pa	= rawPa32 * 0.1;
+   		inHg = inHgSmooth->addData(Pa*0.0002953);
+   		success = true;
+   	}
+   } else if (inMsg->getPGN()==0x1FD06) {
+   	rawPa16  = pack16(inMsg->getDataByte(6),inMsg->getDataByte(5));
+   	if (!isBlank(rawPa16)) {
+   		Pa	= rawPa16 * 100;
+   		inHg = inHgSmooth->addData(Pa*0.0002953);
+   		success = true;
+		}
+   } else if (inMsg->getPGN()==0x1FD07) {
+		rawPa16  =  pack16(inMsg->getDataByte(7),inMsg->getDataByte(6));
+   	if (!isBlank(rawPa16)) {
+   		Pa	= rawPa16 * 100;
+   		inHg = inHgSmooth->addData(Pa*0.0002953);
+   		success = true;
+		}
+   }
+   return success;
+}
+
+  
+float airTempBarometer::getAirTemp(void) { return degF; }
+
+float airTempBarometer::getInHg(void) { return inHg; }
+
