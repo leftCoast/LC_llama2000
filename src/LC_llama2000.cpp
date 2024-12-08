@@ -44,7 +44,7 @@ uint32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
 
 
 llama2000::llama2000(byte inECUInst,int inResetPin,int inIntPin)
-  : ECU() {
+  : netObj() {
 
   resetPin = inResetPin;
   intPin   = inIntPin;
@@ -55,17 +55,18 @@ llama2000::~llama2000(void) {  }
 
 
 bool llama2000::begin(int inCSPin) {
-	ECUname	aName;
+	
+	netName	aName;
 	
 	aName.setID(6387);										// Device ID. We make these up. You get 21 bits. (2097151 or less)
 	aName.setManufCode(0);									// This would be assigned to you by NMEA people.
-	aName.setECUInst(0);										// First ECU (Electronic control unit.)
+	aName.setECUInst(0);										// First netObj (Electronic control unit.)
 	aName.setFunctInst(0);									// First depth transducer.
 	aName.setFunction(DEV_FUNC_GP_TRANS);				// Transducer of some sort.
 	aName.setVehSys(DEV_CLASS_INST);						//	We are an instrument.
 	aName.setSystemInst(0);									// We are the first of our device class.
 	aName.setIndGroup(Marine);								// What kind of machine are we ridin' on?
-	ECU::begin(&aName,45,arbitraryConfig);				// Here's our name, default address and address category.													
+	netObj::begin(&aName,45,arbitraryConfig);				// Here's our name, default address and address category.													
 	pinMode(resetPin, OUTPUT);								// Setup our reset pin.
 	delay(50);													// Sit for a bit..
 	digitalWrite(resetPin, LOW);							// Set reset low.
@@ -113,32 +114,15 @@ void llama2000::recieveMsg(void) {
 			newMsg.setDataByte(i,CAN.read());					// Read and store the byte into the message.
 			i++;															// Bump of the storage index.
 		}																	//
-		handleMsg(&newMsg);											// All stored, let our ECU deal with it.
+		handleMsg(&newMsg);											// All stored, let our netObj deal with it.
 	}
 }
 
 
 void llama2000::idle(void) {
 
-	ECU::idle();
+	netObj::idle();
 	recieveMsg();
-}
-
-// ************* msgHandler *************
-
-
-msgHandler::msgHandler(ECU* inECU)
-   : CA(inECU) { }
-
-
-msgHandler::~msgHandler(void) { }
-
-
-void msgHandler::sendMsg(message* outMsg) {
-
-	if (ourECU) {
-		ourECU->sendMsg(outMsg);
-	}
 }
 
 
@@ -146,8 +130,8 @@ void msgHandler::sendMsg(message* outMsg) {
 // ************* waterSpeedObj *************
 
 
-waterSpeedObj::waterSpeedObj(ECU* inECU)
-   : msgHandler(inECU) {
+waterSpeedObj::waterSpeedObj(netObj* inNetObj)
+   : msgHandler(inNetObj) {
 
   knots   = 0;
   speedMap.setValues(0,1023,0,(1023*1.943844)*0.01);
@@ -177,10 +161,9 @@ float waterSpeedObj::getSpeed(void) { return knots; }
 // ************* waterDepthObj *************
 
 
-waterDepthObj::waterDepthObj(ECU* inECU)
-   : msgHandler(inECU) {
+waterDepthObj::waterDepthObj(netObj* inNetObj)
+   : msgHandler(inNetObj) {
 
-  ourPGN  = 0x1F50B;
   feet   = 0;
 }
 
@@ -208,10 +191,9 @@ float waterDepthObj::getDepth(void) { return feet; }
 // ************* waterTempObj *************
 
 
-waterTempObj::waterTempObj(ECU* inECU)
-   : msgHandler(inECU) {
+waterTempObj::waterTempObj(netObj* inNetObj)
+   : msgHandler(inNetObj) {
 
-   ourPGN   = 0x1FD08;
    degF     = 0;
 }
 
@@ -239,10 +221,9 @@ float waterTempObj::getTemp(void) { return degF; }
 // ************* fluidLevelObj *************
 
 
- fluidLevelObj::fluidLevelObj(ECU* inECU) 
-   : msgHandler(inECU) {
+ fluidLevelObj::fluidLevelObj(netObj* inNetObj) 
+   : msgHandler(inNetObj) {
    
-   ourPGN		= 0x1F211;
 	fluidType	= fuel;  // This is 0.
    level       = 0;
    setSendInterval(2500);
@@ -264,16 +245,16 @@ float fluidLevelObj::getCapacity(void) { return capacity; }
 void fluidLevelObj::setCapacity(float inCapacity) { capacity = inCapacity; }
 
 
-void fluidLevelObj::sendMsg(void) {
+void fluidLevelObj::newMsg(void) {
    
    int16_t  tempInt;
    int32_t  tempLong;
 	message	outMsg;
 	byte		aByte;
 	
-	outMsg.setPGN(ourPGN);
+	outMsg.setPGN(0x1F211);
    outMsg.setPriority(6);
-   outMsg.setSourceAddr(ourECU->getAddr());
+   outMsg.setSourceAddr(ourNetObj->getAddr());
    
    aByte = 0/*instance*/ & 0b00001111;
    aByte = aByte<<4;
@@ -303,15 +284,15 @@ void fluidLevelObj::sendMsg(void) {
    aByte = 0xFF; 
    outMsg.setDataByte(7,aByte);                           // Reserved, so..
    
-   msgHandler::sendMsg(&outMsg);
+  	sendMsg(&outMsg);
 }
 
 
 // ************* airTempBarometer *************
 
 
-airTempBarometer::airTempBarometer(ECU* inECU)
-   : msgHandler(inECU) {
+airTempBarometer::airTempBarometer(netObj* inNetObj)
+   : msgHandler(inNetObj) {
 
    degF	= 0;
    inHg	= 0;

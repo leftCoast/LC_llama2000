@@ -13,9 +13,6 @@
 #define DEF_2515_INT_PIN   2
 
 
-class msgHandler;
-
-
 // ************ llama2000 ************
 
 
@@ -28,7 +25,7 @@ running.
 
 setID(0);								// Device ID. We make these up. You get 21 bits.
 setManufCode(0);						// This would be assigned to you by NMEA people.
-setECUInst(0);							// First ECU (Electronic control unit.)
+setECUInst(0);							// First netObj (Electronic control unit.)
 setFunctInst(0);						// First depth transducer.
 setFunction(DEV_FUNC_GP_TRANS);	// Depth transducer.
 											// Some spare bit here..
@@ -40,7 +37,7 @@ setArbitraryAddrBit(?);				// Will be set when we choose our addressing mode.
 */
 
 
-class llama2000 :   public ECU {
+class llama2000 :   public netObj {
 
    public:
             llama2000(byte inECUInst=0,int inResetPin=DEF_2515_RST_PIN,int inIntPin=DEF_2515_INT_PIN);
@@ -56,7 +53,7 @@ class llama2000 :   public ECU {
 };
 
 
-
+/*
 // ************* msgHandler *************
 //    These are the message handlers.
 // *************************************
@@ -64,14 +61,14 @@ class llama2000 :   public ECU {
 class msgHandler : public CA {
 
    public:
-            msgHandler(ECU* inECU);
+            msgHandler(netObj* inNetObj);
             ~msgHandler(void);
             
    virtual  void	sendMsg(message* outMsg);
             
 };
 
-
+*/
 
 // ************* waterSpeedObj *************
 
@@ -79,7 +76,7 @@ class msgHandler : public CA {
 class waterSpeedObj  : public msgHandler {
 
    public:
-				waterSpeedObj(ECU* inECU);
+				waterSpeedObj(netObj* inNetObj);
 				~waterSpeedObj(void);
 
             float getSpeed(void);
@@ -97,7 +94,7 @@ class waterSpeedObj  : public msgHandler {
 class waterDepthObj  : public msgHandler {
 
    public:
-				waterDepthObj(ECU* inECU);
+				waterDepthObj(netObj* inNetObj);
 				~waterDepthObj(void);
           
             float getDepth(void);
@@ -114,7 +111,7 @@ class waterDepthObj  : public msgHandler {
 class waterTempObj  : public msgHandler {
 
    public:
-            waterTempObj(ECU* inECU);
+            waterTempObj(netObj* inNetObj);
             ~waterTempObj(void);
           
             float getTemp(void);
@@ -140,7 +137,7 @@ enum tankType {
 class fluidLevelObj  : public msgHandler {
 
    public:
-            fluidLevelObj(ECU* inECU);
+            fluidLevelObj(netObj* inNetObj);
             ~fluidLevelObj(void);
           
             tankType getTankType(void);
@@ -149,7 +146,7 @@ class fluidLevelObj  : public msgHandler {
             void     setLevel(float inLevel);
             float    getCapacity(void);
             void     setCapacity(float inCapacity);
-   virtual  void     sendMsg(void);
+   virtual  void     newMsg(void);
    
             tankType fluidType;
             float    level;
@@ -166,7 +163,7 @@ class fluidLevelObj  : public msgHandler {
 class airTempBarometer  : public msgHandler {
 
    public:
-            airTempBarometer(ECU* inECU);
+            airTempBarometer(netObj* inNetObj);
             ~airTempBarometer(void);
           
    virtual  bool  handleMsg(message* inMsg);

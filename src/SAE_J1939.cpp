@@ -160,12 +160,12 @@ void message::setDataByte(int index,byte inByte) { msgData[index] = inByte; }
 byte message::getDataByte(int index) { return msgData[index]; }
 
 
-// This takes our data bytes, MUST be eight in this case. Converts it to a ECUname and
+// This takes our data bytes, MUST be eight in this case. Converts it to a netName and
 // compares it to the passed in name. If the message's name is less in value than the
 // passed in name, message owner's name wins the battle.
-bool message::msgIsLessThanName(ECUname* inName) {
+bool message::msgIsLessThanName(netName* inName) {
 	
-	ECUname	msgName;
+	netName	msgName;
 	
 	if (inName) {											// They gave us a non-null name pointer. Check
 		if (getNumBytes()==8) {							// Our data is 8 bytes. Check
@@ -273,18 +273,18 @@ uint32_t BAMmsg::getBAMPGN(void) {
 
 
 
-//  -----------  ECUname class  -----------
+//  -----------  netName class  -----------
 
 
-byte nameBuff[8];		// Global name buffer for when people want to grab the 8 bytes from the ECUname class.
+byte nameBuff[8];		// Global name buffer for when people want to grab the 8 bytes from the netName class.
 
 
 // Packed eight byte set of goodies. We'll preload this with a depth sounder. As an example.
-ECUname::ECUname(void) {
+netName::netName(void) {
 
 	setID(0);								// Device ID. We make these up. You get 21 bits.
 	setManufCode(0);						// This would be assigned to you by NMEA people.
-	setECUInst(0);							// First ECU (Electronic control unit.)
+	setECUInst(0);							// First netObj (Electronic control unit.)
 	setFunctInst(0);						// First depth transducer.
 	setFunction(DEV_FUNC_GP_TRANS);	// Depth transducer.
 												// Some spare bit here..
@@ -294,11 +294,11 @@ ECUname::ECUname(void) {
 	//setArbitraryAddrBit(?);			// Will be set when we choose our addressing mode.
 }
 
-ECUname::~ECUname(void) {  }
+netName::~netName(void) {  }
 
 
 // Just in case you need to clear it out.
-void ECUname::clearName(void) {
+void netName::clearName(void) {
 
 	for(int i=0;i<8;i++) {
 		name[i] = 0;
@@ -307,7 +307,7 @@ void ECUname::clearName(void) {
 
 
 // We the same as that guy?
-bool ECUname::sameName(ECUname* inName) {
+bool netName::sameName(netName* inName) {
 	
 	for(int i=0;i<8;i++) {
 		if (name[i] != inName->name[i]) return false;
@@ -317,7 +317,7 @@ bool ECUname::sameName(ECUname* inName) {
 
 
 // Are we less than that guy?
-bool ECUname::isLessThanName(ECUname* inName) {
+bool netName::isLessThanName(netName* inName) {
 
 	for(int i=0;i<8;i++) {											// For each byte
 		if (name[i] < inName->name[i]) return true;		// First non equal, we are less? Bail with true.
@@ -328,7 +328,7 @@ bool ECUname::isLessThanName(ECUname* inName) {
 
 				
 // 64 bit - Pass back ta copy of the 64 bits that this makes up as our name.
-byte* ECUname::getName(void) {						
+byte* netName::getName(void) {						
 	for (int i=0;i<8;i++) {
 		nameBuff[i] = name[i];
 	}
@@ -337,7 +337,7 @@ byte* ECUname::getName(void) {
 
 
 // If we want to decode one?
-void ECUname::setName(byte* namePtr) {
+void netName::setName(byte* namePtr) {
 	
 	for (int i=0;i<8;i++) {
 		name[i] = namePtr[i];
@@ -346,7 +346,7 @@ void ECUname::setName(byte* namePtr) {
 
 
 // We want to be a copy of this one? Ok..
-void ECUname::copyName(ECUname* inName) {
+void netName::copyName(netName* inName) {
 
 	if (inName) {
 		setName(inName->getName());
@@ -357,10 +357,10 @@ void ECUname::copyName(ECUname* inName) {
 // Byte 8
 // 1 bit - True, we CAN change our address. 128..247	
 // False, we can't change our own address.
-bool ECUname::getArbitraryAddrBit(void) { return name[7] >> 7; }    
+bool netName::getArbitraryAddrBit(void) { return name[7] >> 7; }    
 
 
-void ECUname::setArbitraryAddrBit(bool AABit) { 
+void netName::setArbitraryAddrBit(bool AABit) { 
  
 	name[7] &= ~(1<<7);								//Clear bit
 	name[7] = name[7] | ((AABit & 0x1)<<7);
@@ -369,7 +369,7 @@ void ECUname::setArbitraryAddrBit(bool AABit) {
 
 // 3 bit - Assigned by committee. Tractor, car, boat..
 // See list of values in .h file.
-indGroup ECUname::getIndGroup(void) { 
+indGroup netName::getIndGroup(void) { 
 	
 	byte group;
 	
@@ -378,7 +378,7 @@ indGroup ECUname::getIndGroup(void) {
 }
 
 // See list of values in .h file.
-void ECUname::setIndGroup(indGroup inGroup) {
+void netName::setIndGroup(indGroup inGroup) {
 	
 	byte group;
 	
@@ -389,10 +389,10 @@ void ECUname::setIndGroup(indGroup inGroup) {
 
 
 // 4 bit - System instance, like engine1 or engine2.
-byte ECUname::getSystemInst(void) { return name[7] & 0xF; }
+byte netName::getSystemInst(void) { return name[7] & 0xF; }
 
 
-void ECUname::setSystemInst(byte sysInst) {
+void netName::setSystemInst(byte sysInst) {
 	
 	name[7] &= ~(0xF);							//Clear bits
 	name[7] = name[7] | (sysInst & 0xF);
@@ -402,11 +402,11 @@ void ECUname::setSystemInst(byte sysInst) {
 //Byte7
 // 7 bit - Assigned by committee.
 // See list of values in .h file.
-byte ECUname::getVehSys(void) { return (name[6] >> 1); }
+byte netName::getVehSys(void) { return (name[6] >> 1); }
 
 
 // See list of values in .h file.
-void ECUname::setVehSys(byte vehSys) {
+void netName::setVehSys(byte vehSys) {
 
 	name[6] = 0;								//Clear bits
 	name[6] = name[6] | (vehSys << 1);
@@ -416,20 +416,20 @@ void ECUname::setVehSys(byte vehSys) {
 //Byte6
 // 8 bit - Assigned by committee.
 // See list of values in .h file.
-byte ECUname::getFunction(void) { return name[5]; }
+byte netName::getFunction(void) { return name[5]; }
 
 
 // See list of values in .h file.
-void ECUname::setFunction(byte funct) { name[5] = funct; }
+void netName::setFunction(byte funct) { name[5] = funct; }
 
 
 //Byte5
 // 5 bit - Instance of this function.
 // See list of values in .h file.
-byte ECUname::getFunctInst(void) { return name[4] >> 3; }
+byte netName::getFunctInst(void) { return name[4] >> 3; }
 
 // See list of values in .h file.
-void ECUname::setFunctInst(byte functInst) {
+void netName::setFunctInst(byte functInst) {
 
 	name[4] &= ~(0x1F << 3);								//Clear bits
 	name[4] = name[4] | ((functInst & 0x1F) << 3);
@@ -437,10 +437,10 @@ void ECUname::setFunctInst(byte functInst) {
 
 
 // 3 bit - What processor instance are we?
-byte ECUname::getECUInst(void) { return name[4] & 0x7; }
+byte netName::getECUInst(void) { return name[4] & 0x7; }
 
 
-void ECUname::setECUInst(byte inst) {
+void netName::setECUInst(byte inst) {
 
 	name[4] &= ~(0x7);
 	name[4] = name[4] | (inst & 0x7);
@@ -450,10 +450,10 @@ void ECUname::setECUInst(byte inst) {
 //Byte4/3
 // 11 bit - Assigned by committee. Who made this thing?
 // The list is long. See https://canboat.github.io/canboat/canboat.html
-uint16_t ECUname::getManufCode(void) { return name[3]<<3 | (name[2] >> 5);  }
+uint16_t netName::getManufCode(void) { return name[3]<<3 | (name[2] >> 5);  }
 
 
-void ECUname::setManufCode(uint16_t manfCode) {
+void netName::setManufCode(uint16_t manfCode) {
 
 	name[2] &= ~(0x7<<5); //Clear bits byte 3
 	name[3] = 0; //Clear bits byte 4
@@ -464,10 +464,10 @@ void ECUname::setManufCode(uint16_t manfCode) {
 
 //Byte3/2/1
 // 21 bit - Unique Fixed value. Product ID & Serial number kinda' thing.
-uint32_t ECUname::getID(void) { return (name[2] & 0x1F) << 16 | (name[1] << 8) | name[0]; }
+uint32_t netName::getID(void) { return (name[2] & 0x1F) << 16 | (name[1] << 8) | name[0]; }
 
 
-void ECUname::setID(uint32_t value) {
+void netName::setID(uint32_t value) {
 
 	name[0] = value & 0xFF;
 	name[1] = (value >> 8) & 0xFF;
@@ -476,11 +476,11 @@ void ECUname::setID(uint32_t value) {
 }
 
 
-void ECUname::showName(void) {
+void netName::showName(void) {
 	
 	Serial.print("ISO ID          : "); Serial.println(getID());			// Device ID. Serial #
 	Serial.print("Manuf code      : "); Serial.println(getManufCode());	// Who made you?					
-	Serial.print("ECU Inst.       : "); Serial.println(getECUInst());		// What ECU# are you?
+	Serial.print("ECU Inst.       : "); Serial.println(getECUInst());		// What netObj# are you?
 	Serial.print("Funct. Inst.    : "); Serial.println(getFunctInst());	// What # of your thing are you?
 	Serial.print("Actual Funct.   : "); Serial.println(getFunction());	// Depth transducer.
 																								// Some spare bit here..
@@ -678,31 +678,30 @@ msgObj::msgObj(message* inMsg)
 msgObj::~msgObj(void) { }					
 					
 
-mesgQ::mesgQ(void) {  }
+msgQ::msgQ(void) {  }
 
 
-mesgQ::~mesgQ(void) {  }
+msgQ::~msgQ(void) {  }
 
 
 
-//				----- ECU Electronic control unit. -----
+//		----- netObj. Base class for allowing navigation of SAE J1939 networks -----
 
-
-// Electronic control unit.						
-ECU::ECU(void)
+						
+netObj::netObj(void)
 	: linkList(), idler() {
 	
-	ourState			= config;		// We arrive in config mode.
-	addr				= NULL_ADDR;	// No address.
+	ourState	= config;		// We arrive in config mode.
+	addr		= NULL_ADDR;	// No address.
 }
 
 
 // Destructor. I don't think there's anything that's not handled automatically.
-ECU::~ECU(void) {  }
+netObj::~netObj(void) {  }
 
 
 // Things we can do to set up shop once we are actually post globals and running in code.
-void ECU::begin(ECUname* inName,byte inAddr,addrCat inAddCat) {
+void netObj::begin(netName* inName,byte inAddr,addrCat inAddCat) {
 
 	copyName(inName);							// We get our name info and copy it to ourselves.
 	setAddr(inAddr);							// Our initial address.
@@ -713,28 +712,100 @@ void ECU::begin(ECUname* inName,byte inAddr,addrCat inAddCat) {
 }
 
 
-// Add the handlers (CAs) of the messages you would like to send/receive.
-void ECU::addMsgHandler(CA* inCA) {
+// Add the handlers of the messages you would like to send/receive.
+void netObj::addMsgHandler(msgHandler* inHanldler) {
 
-	addToTop(inCA);	// Hope it's a good one. NULL pointer will be filtered out.
+	addToTop(inHanldler);	// Hope it's a good one. NULL pointers will be filtered out.
 }
 
 
-void ECU::stateName(ECUState aState) {
+// We are passed in a message to handle. (From our progeny, or ourselves, if assembled.)
+// Copy it and stuff it in the Q for later.
+void netObj::handleMsg(message* inMsg) {
+
+	msgObj*	newMsg;
 	
-	switch(aState) {
-		case config		: Serial.print("Configuration");	break;
-		case startHold	: Serial.print("Start wait");		break;
-		case arbit		: Serial.print("Arbitration");	break;
-		case running	: Serial.print("Running");			break;
-		case addrErr	: Serial.print("Address error");	break;
+	if (inMsg) {
+		newMsg = new msgObj(inMsg);
+		if (newMsg) {
+			ourMsgQ.push(newMsg);
+		}
 	}
+}
+
+
+// First  we see if it's a network task that we have to handle ourselves. Then, if not, we
+// ask each the handlers if one of them can handle it. Once a msgHandler handles it, or
+// none will. We are done.	
+void netObj::checkMessages(void) {
+
+	msgObj*	aMsg;
+	msgHandler*		trace;
+	bool		done;
+	
+	aMsg = (msgObj*)ourMsgQ.pop();
+	if (aMsg) {
+		if (isReqAddrClaim(aMsg)) {
+			handleReqAdderClaim(aMsg);
+		}
+		else if (isAddrClaim(aMsg)) {
+			handleAdderClaim(aMsg);
+		}
+		else if (isCantClaim(aMsg)) {
+			handleCantClaim(aMsg);
+		}
+		else if (isCommandedAddr(aMsg)) {
+			handleComAddr(aMsg);
+		}
+		else {
+			if (ourState==running) {
+				done = false;
+				trace = (msgHandler*)getFirst();
+				while(!done) {
+					if (trace) {
+						if (trace->handleMsg(aMsg)) {
+							done = true;
+						} else {
+							trace = (msgHandler*)trace->getNext();
+						}
+					} else {
+						done = true;
+					}
+				}
+			}
+		}
+		delete(aMsg);
+	}
+}
+	
+	
+// Calculate and start the startup time delay. Function of address.
+void netObj::startHoldTimer(void) {
+	
+	if (addr>=0 && addr <=127) {
+		holdTimer.setTime(.1);
+		return;
+	}
+	if (addr>=248 && addr <=253) {
+		holdTimer.setTime(.1);
+		return;
+	}
+	holdTimer.setTime(250);
+}
+
+
+// Assuming that in some way YOU fixed the error. This will clear the address error and
+// restart the process. By YOU I mean let's say you had an address collision? YOU set a
+// unclaimed address by calling setAddress() and now it's time to run on that new address.
+void netObj::clearErr(void) {
+
+	ourState = config;	// Next pass though idle() will kick off the machine.
 }
 
 
 // We need to change states. This is kinda' the flowchart of the program. What steps do we
 // do, if even possible, to get from one state to another? List 'em here.
-void ECU::changeState(ECUState newState) {
+void netObj::changeState(netObjState newState) {
 	
 	switch(ourState) {
 		case config		:													// **    We are in config state     **
@@ -802,70 +873,43 @@ void ECU::changeState(ECUState newState) {
 	}
 }
 
-
-// We are passed in a message to handle. (From our progeny, or ourselves, if assembled.)
-// Copy it and stuff it in the Q for later.
-void ECU::handleMsg(message* inMsg) {
-
-	msgObj*	newMsg;
 	
-	if (inMsg) {
-		newMsg = new msgObj(inMsg);
-		if (newMsg) {
-			ourMsgQ.push(newMsg);
-		}
+// For debug prints. Outputs name for each state.
+void netObj::stateName(netObjState aState) {
+	
+	switch(aState) {
+		case config		: Serial.print("Configuration");	break;
+		case startHold	: Serial.print("Start wait");		break;
+		case arbit		: Serial.print("Arbitration");	break;
+		case running	: Serial.print("Running");			break;
+		case addrErr	: Serial.print("Address error");	break;
 	}
 }
 
-	
-// First  we see if it's a network task that we have to handle ourselves. Then, if not, we
-// ask each the CAs if one of them can handle it. Once a CA handles it, or none will. We
-// are done.	
-void ECU::checkMessages(void) {
 
-	msgObj*	aMsg;
-	CA*		trace;
-	bool		done;
-	
-	aMsg = (msgObj*)ourMsgQ.pop();
-	if (aMsg) {
-		if (isReqAddrClaim(aMsg)) {
-			handleReqAdderClaim(aMsg);
-		}
-		else if (isAddrClaim(aMsg)) {
-			handleAdderClaim(aMsg);
-		}
-		else if (isCantClaim(aMsg)) {
-			handleCantClaim(aMsg);
-		}
-		else if (isCommandedAddr(aMsg)) {
-			handleComAddr(aMsg);
-		}
-		else {
-			if (ourState==running) {
-				done = false;
-				trace = (CA*)getFirst();
-				while(!done) {
-					if (trace) {
-						if (trace->handleMsg(aMsg)) {
-							done = true;
-						} else {
-							trace = (CA*)trace->getNext();
-						}
-					} else {
-						done = true;
-					}
-				}
-			}
-		}
-		delete(aMsg);
-	}
+// SET how we deal with addressing.
+void netObj::setAddrCat(addrCat inAddrCat) {
+
+	ourAddrCat = inAddrCat;
+	setArbitraryAddrBit(ourAddrCat==arbitraryConfig);
 }
+
+
+// SEE how we deal with addressing.
+addrCat netObj::getAddrCat(void) { return ourAddrCat; }
+
+
+// Fine, our address is now inAddr.
+void netObj::setAddr(byte inAddr) { addr = inAddr; }
+
+
+// Here's our address.
+byte netObj::getAddr(void) { return addr; }
 
 
 // Request address claimed. Someone is asking for everyone, or us, to show who they are
 // and what address they are holding at this moment.
-bool ECU::isReqAddrClaim(message* inMsg) {
+bool netObj::isReqAddrClaim(message* inMsg) {
 	
 	if (inMsg->getPDUf()==REQ_ADDR_CLAIM_PF && inMsg->getNumBytes()==3) {
 		return true;
@@ -876,7 +920,7 @@ bool ECU::isReqAddrClaim(message* inMsg) {
 
 // Address Claimed. Someone is telling the world that this is the address they are going
 // to use. If this conflicts with yours? Deal with that.
-bool ECU::isAddrClaim(message* inMsg) {
+bool netObj::isAddrClaim(message* inMsg) {
 	
 	if (inMsg->getPDUf()==ADDR_CLAIMED_PF && inMsg->getPDUs()==GLOBAL_ADDR && inMsg->getNumBytes()==8) {
 		return true;
@@ -886,7 +930,7 @@ bool ECU::isAddrClaim(message* inMsg) {
 
 
 // Someone is telling the network that they can not claim an address at all.
-bool ECU::isCantClaim(message* inMsg) {
+bool netObj::isCantClaim(message* inMsg) {
 	
 	if (inMsg->getPDUf()==ADDR_CLAIMED_PF && inMsg->getPDUs()==GLOBAL_ADDR && inMsg->getSourceAddr()==NULL_ADDR && inMsg->getNumBytes()==8) {
 		return true;
@@ -896,7 +940,7 @@ bool ECU::isCantClaim(message* inMsg) {
 
 
 // Someone is telling somebody to change their address to a given new value. (The 9th byte)
-bool ECU::isCommandedAddr(message* inMsg) {
+bool netObj::isCommandedAddr(message* inMsg) {
 	
 	if (inMsg->getPGN()==COMMAND_ADDR && inMsg->getNumBytes()==9) return true;
 	return false;
@@ -904,7 +948,7 @@ bool ECU::isCommandedAddr(message* inMsg) {
 
 
 // We have a new message asking us, or everyone, what address we are and what our name is.
-void ECU::handleReqAdderClaim(message* inMsg) {
+void netObj::handleReqAdderClaim(message* inMsg) {
 	
 	switch(ourState) {
 		case arbit		:																		// Arbitrating
@@ -925,7 +969,7 @@ void ECU::handleReqAdderClaim(message* inMsg) {
 
 // We have a message telling us that someone claimed an address. Let's see if it's our
 // address they claimed. If so? We can send back and address claimed?
-void ECU::handleAdderClaim(message* inMsg) {
+void netObj::handleAdderClaim(message* inMsg) {
 
 	ourAddrList.addAddr(inMsg->getSourceAddr());						// In all cases we add this address to our list.
 	switch(ourState) {														// Now, lets see what's what..
@@ -963,12 +1007,12 @@ void ECU::handleAdderClaim(message* inMsg) {
 
 // We have a message telling someone, or all, that they can not claim an address. I don't
 // have any response to this. "Gee too bad"? For now I guess, it's handled. 
-void ECU::handleCantClaim(message* inMsg) { }
+void netObj::handleCantClaim(message* inMsg) { }
 
 
-// There is a command that sends ECU's new addresses to switch to. We deal with these
+// There is a command that sends netObj's new addresses to switch to. We deal with these
 // here.
-void ECU::handleComAddr(message* inMsg) {
+void netObj::handleComAddr(message* inMsg) {
 
 	if (ourAddrCat==commandConfig) {				// Only commandConfig addressing can do this.
 		switch(ourState) {							// If our state is..
@@ -981,57 +1025,9 @@ void ECU::handleComAddr(message* inMsg) {
 	}
 }
 
-
-// See how we deal with addressing.
-addrCat ECU::getAddrCat(void) { return ourAddrCat; }
-
-
-// Set how we deal with addressing.
-void ECU::setAddrCat(addrCat inAddrCat) {
-
-	ourAddrCat = inAddrCat;
-	setArbitraryAddrBit(ourAddrCat==arbitraryConfig);
-}
-
-
-// serviceConfig
-// commandConfig
-// selfConfig
-byte ECU::getAddr(void) { return addr; }
-
-
-// Fine, our address is now inAddr.
-void ECU::setAddr(byte inAddr) { addr		= inAddr; }
-
-
-// Assuming that in some way YOU fixed the error. This will clear the address error and
-// restart the process. By YOU I mean let's say you had an address collision? YOU set a
-// unclaimed address by calling setAddress() and now it's time to run on that new address.
-void ECU::clearErr(void) {
-
-	ourState = config;	// Next pass though idle() will kick off the machine.
-}
-	
-	
-// Calculate and start the startup time delay. Function of address.
-void ECU::startHoldTimer(void) {
-	
-	if (addr>=0 && addr <=127) {
-		holdTimer.setTime(.1);
-		return;
-	}
-	if (addr>=248 && addr <=253) {
-		holdTimer.setTime(.1);
-		return;
-	}
-	holdTimer.setTime(250);
-}
-
-																				
-// arbitraryConfig
 	
 // Calculate and start the claim time delay. Random function.	
-void ECU::startClaimTimer(void) {
+void netObj::startClaimTimer(void) {
 
 	long	rVal;
 	
@@ -1039,65 +1035,9 @@ void ECU::startClaimTimer(void) {
 	arbitTimer.setTime(rVal * 0.6);
 }
 
-		
-// This sends the request to inAddr to send back their name. inAdder can be specific or
-// GLOBAL_ADDR to hit everyone. The hope is that whomever called this cleared out the
-// address list. Not the end of the world if not.
-void ECU::sendRequestForAddressClaim(byte inAddr) {
-
-	message	ourMsg(3);						// Create a message with 3 byte data buffer.
 	
-	ourMsg.setDataByte(0,0);				// Byte zero, gets zero.
-	ourMsg.setDataByte(1,0xEE);			// Byte one, gets 0xEE.
-	ourMsg.setDataByte(2,0);				// Byte 2 gets zero. These three are saying "Send your name!"
-	ourMsg.setSourceAddr(getAddr());		// Set our address.
-	ourMsg.setPGN(REQ_MESSAGE);			// Set the PGN..
-	ourMsg.setPDUs(inAddr);					// Then set destination address as lower bits of PGN.
-	sendMsg(&ourMsg);							// Off it goes!
-}
-
-
-void ECU::sendAddressClaimed(bool tryFail) {
-	
-	message	ourMsg;								// Create a message. (Default buffer size.)
-	byte*		ourName;								// Pointer for our name's data.
-
-	ourName = getName();							// Get a fresh copy of our name.
-	for(int i=0;i<8;i++) {						// For each byte in our name..
-		ourMsg.setDataByte(i,ourName[i]);	// Set our name byte into the message data buffer.
-	}													// 
-	if (tryFail) {									// If we're trying..
-		ourMsg.setSourceAddr(getAddr());		// Set our address. (ACK)
-	} else {											// Else we failed to get one..
-		ourMsg.setSourceAddr(NULL_ADDR);		// Set NULL address. (NACK)
-	}													//
-	ourMsg.setPGN(ADDR_CLAIMED);				// Set the PGN..
-	ourMsg.setPDUs(GLOBAL_ADDR);				// Then set destination address as lower bits of PGN.
-	sendMsg(&ourMsg);								// Off it goes!													
-}
-
-
-void ECU::sendCannotClaimAddress(void) { sendAddressClaimed(false); }
-
-
-void ECU::sendCommandedAddress(byte comAddr) {
-	
-	message	ourMsg(9);							// Create a 9 byte message.
-	byte*		ourName;								// Pointer for our name's data.
-	
-	ourName = getName();							// Get a fresh copy of our name.
-	for(int i=0;i<8;i++) {						// For each byte in our name..
-		ourMsg.setDataByte(i,ourName[i]);	// Set our name byte into the message data buffer.
-	}													//
-	ourMsg.setDataByte(8,comAddr);			// Set our commanded address byte into the message.
-	ourMsg.setSourceAddr(getAddr());			// Set our address.
-	ourMsg.setPGN(COMMAND_ADDR);				// Set the PGN..
-	sendMsg(&ourMsg);								
-}
-
-
 // From whatever state we are in now, start arbitration.
-void ECU::startArbit(void) {
+void netObj::startArbit(void) {
 		
 	if (addr==NULL_ADDR) {								// If we have no current address..
 		ourAddrList.dumpList();							// Clear out list of addresses.
@@ -1119,7 +1059,7 @@ void ECU::startArbit(void) {
 // Ok, we need an address. Go through the allowed list checking with our generated list of
 // claimed addresses. If you can't find a value? Grab it as our own and pass it back! If
 // we find ALL of them? Pass back a NULL_ADDR as a fail.
-byte ECU::chooseAddr(void) {
+byte netObj::chooseAddr(void) {
 
 	int i;
 	
@@ -1130,9 +1070,10 @@ byte ECU::chooseAddr(void) {
 	}
 	return NULL_ADDR;
 }
-
+	
+	
 // Arbitration is all about timers. That and adress lists..
-void ECU::checkArbit(void) {
+void netObj::checkArbit(void) {
 	
 	if (ourArbitState==waitingForAddrs) {			// If gathering addresses, to choose a new one..
 		if (arbitTimer.ding()) {						// If gathering's over..
@@ -1158,75 +1099,130 @@ void ECU::checkArbit(void) {
 		}
 	}
 }
+		
+		
+// This sends the request to inAddr to send back their name. inAdder can be specific or
+// GLOBAL_ADDR to hit everyone. The hope is that whomever called this cleared out the
+// address list. Not the end of the world if not.
+void netObj::sendRequestForAddressClaim(byte inAddr) {
+
+	message	ourMsg(3);						// Create a message with 3 byte data buffer.
+	
+	ourMsg.setDataByte(0,0);				// Byte zero, gets zero.
+	ourMsg.setDataByte(1,0xEE);			// Byte one, gets 0xEE.
+	ourMsg.setDataByte(2,0);				// Byte 2 gets zero. These three are saying "Send your name!"
+	ourMsg.setSourceAddr(getAddr());		// Set our address.
+	ourMsg.setPGN(REQ_MESSAGE);			// Set the PGN..
+	ourMsg.setPDUs(inAddr);					// Then set destination address as lower bits of PGN.
+	sendMsg(&ourMsg);							// Off it goes!
+}
+
+
+void netObj::sendAddressClaimed(bool tryFail) {
+	
+	message	ourMsg;								// Create a message. (Default buffer size.)
+	byte*		ourName;								// Pointer for our name's data.
+
+	ourName = getName();							// Get a fresh copy of our name.
+	for(int i=0;i<8;i++) {						// For each byte in our name..
+		ourMsg.setDataByte(i,ourName[i]);	// Set our name byte into the message data buffer.
+	}													// 
+	if (tryFail) {									// If we're trying..
+		ourMsg.setSourceAddr(getAddr());		// Set our address. (ACK)
+	} else {											// Else we failed to get one..
+		ourMsg.setSourceAddr(NULL_ADDR);		// Set NULL address. (NACK)
+	}													//
+	ourMsg.setPGN(ADDR_CLAIMED);				// Set the PGN..
+	ourMsg.setPDUs(GLOBAL_ADDR);				// Then set destination address as lower bits of PGN.
+	sendMsg(&ourMsg);								// Off it goes!													
+}
+
+
+void netObj::sendCannotClaimAddress(void) { sendAddressClaimed(false); }
+
+
+void netObj::sendCommandedAddress(byte comAddr) {
+	
+	message	ourMsg(9);							// Create a 9 byte message.
+	byte*		ourName;								// Pointer for our name's data.
+	
+	ourName = getName();							// Get a fresh copy of our name.
+	for(int i=0;i<8;i++) {						// For each byte in our name..
+		ourMsg.setDataByte(i,ourName[i]);	// Set our name byte into the message data buffer.
+	}													//
+	ourMsg.setDataByte(8,comAddr);			// Set our commanded address byte into the message.
+	ourMsg.setSourceAddr(getAddr());			// Set our address.
+	ourMsg.setPGN(COMMAND_ADDR);				// Set the PGN..
+	sendMsg(&ourMsg);								
+}
 
 		
-// Deal with timers, See if any CA's need to output messages of their own. Or other chores
+// Deal with timers, See if any msgHandler's need to output messages of their own. Or other chores
 // we know nothing about.
-void ECU::idle(void) {
+void netObj::idle(void) {
 
-	CA*			trace;
+	msgHandler*			trace;
 	
 	switch(ourState) {
-		case config		:									// We're in config state. Time to start up!
-			changeState(startHold);						// First pass through idle in config state. Start holding.
-		break;
-		case startHold	:									// In startHold state.
-			if (holdTimer.ding()) {						// If the time is up..
-				holdTimer.reset();						// Shut off the timer.
-				if (ourAddrCat==arbitraryConfig) {	// If we do arbitration..
-					changeState(arbit);					// Slide into arbitration gear.
-				} else {										// Else, we don't do arbitration?
-					changeState(running);				// Then we start running.
-				}												//
-			}													//
-		break;												//
-		case arbit		:									// In arbitration state. We'll check what's up.
-			checkMessages();								// First see if there's a message waiting for us.
-			checkArbit();									// Then check the state of our arbitration.
-		break;												//
-		case running	:									// We're in running state. Let the CAs have some runtime.
-			checkMessages();								// First see if there's a message waiting for us.
-			trace = (CA*)getFirst();					// Well start at the beginning and let 'em all have a go.
-			while(trace) {									// While we got something..
-				trace->idleTime();						// Give 'em some time to do things.
-				trace = (CA*)trace->getNext();		// Grab the next one.
-			}													//
-		break;												//
-		default			:						break;	// Anything else? Basically do nothing.
+		case config		:										// We're in config state. Time to start up!
+			changeState(startHold);							// First pass through idle in config state. Start holding.
+		break;													//
+		case startHold	:										// In startHold state.
+			if (holdTimer.ding()) {							// If the time is up..
+				holdTimer.reset();							// Shut off the timer.
+				if (ourAddrCat==arbitraryConfig) {		// If we do arbitration..
+					changeState(arbit);						// Slide into arbitration gear.
+				} else {											// Else, we don't do arbitration?
+					changeState(running);					// Then we start running.
+				}													//
+			}														//
+		break;													//
+		case arbit		:										// In arbitration state. We'll check what's up.
+			checkMessages();									// First see if there's a message waiting for us.
+			checkArbit();										// Then check the state of our arbitration.
+		break;													//
+		case running	:										// We're in running state. Let the CAs have some runtime.
+			checkMessages();									// First see if there's a message waiting for us.
+			trace = (msgHandler*)getFirst();				// Well start at the beginning and let 'em all have a go.
+			while(trace) {										// While we got something..
+				trace->idleTime();							// Give 'em some time to do things.
+				trace = (msgHandler*)trace->getNext();	// Grab the next one.
+			}														//
+		break;													//
+		default			:						break;		// Anything else? Basically do nothing.
 	}		
 }
 
 
 		
-//  -----------  CA class  -----------
+//  -----------  msgHandler class  -----------
 
 
-CA::CA(ECU* inECU)
+msgHandler::msgHandler(netObj* inNetObj)
 	: linkListObj() {
 	
-	ourECU		= inECU;					// Pointer back to our "boss".
-	ourPGN		= 0;						// Default to zero.
-   numBytes		= DEF_NUM_BYTES;		// Set the default size.
-   intervaTimer.reset();				// Default to off.
+	ourNetObj	= inNetObj;		// Pointer back to our "boss".
+   intervaTimer.reset();		// Default to off.
 }
 
 
-CA::~CA(void) { }
+msgHandler::~msgHandler(void) { }
 
 
-int CA::getNumBytes(void) { return numBytes; }
+// Fill this in if you'd like to read messages.
+bool msgHandler::handleMsg(message* inMsg) { return false; }
 
 
-void CA::setNumBytes(int inNumBytes) { numBytes = inNumBytes; }
+// Fill this in if you'd like to create and send messages.
+void msgHandler::newMsg(void) { }
 
 
-bool CA::handleMsg(message* inMsg) { return false; }
+// The created messages are sent by this guy.
+void msgHandler::sendMsg(message* inMsg) { ourNetObj->sendMsg(inMsg); }
 
 
-void CA::sendMsg(void) {  }
-
-
-void CA::setSendInterval(float inMs) {
+// Broadcasting typically is done on a clock. Set the time interval with this call.
+void msgHandler::setSendInterval(float inMs) {
 
    if (inMs>0) {
       intervaTimer.setTime(inMs);
@@ -1235,20 +1231,17 @@ void CA::setSendInterval(float inMs) {
    }
 }
  
-
-float CA::getSendInterval(void) {  return intervaTimer.getTime(); }
+ 
+// To be complete, you can read out the time interval with this call.
+float msgHandler::getSendInterval(void) {  return intervaTimer.getTime(); }
  
 
-// Same as idle, but called by the ECU.	 
-void  CA::idleTime(void) {
+// Same as idle, but called by netContorl.	 
+void  msgHandler::idleTime(void) {
 
    if (intervaTimer.ding()) {
-      sendMsg();
+      newMsg();
       intervaTimer.stepTime();
    }
 }
-
-
-
-		
-				
+			

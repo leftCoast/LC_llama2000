@@ -11,7 +11,7 @@
 // to 29 bits of info. Followed by 0..8 bytes data.
 // 
 // PGN - Parameter Group Number. Basically what is this message about.
-class ECUname;
+class netName;
 
 #define GLOBAL_ADDR		255		// Destination only address. "Hey everyone!"
 #define NULL_ADDR			254		// Source address only. "Hey, listen! But, I have no address."
@@ -82,7 +82,7 @@ class message {
 				void		setDataByte(int index,byte inByte);
 				byte		getDataByte(int index);
 				void		showMessage(void);
-				bool		msgIsLessThanName(ECUname* inName);
+				bool		msgIsLessThanName(netName* inName);
 				
 	protected:
 				int		numBytes;	// Size of our data buffer.
@@ -116,7 +116,7 @@ class BAMmsg :	public message {
 
 
 	
-//				----- ECU name -----
+//				----- netObj name -----
 
 
 // Industry group. These fit an enum well.
@@ -295,18 +295,18 @@ enum indGroup {
 
 
 // Packed eight byte set of goodies.
-class ECUname {
+class netName {
 	
 	public:
-					ECUname(void);
-	virtual		~ECUname(void);
+					netName(void);
+	virtual		~netName(void);
 		
 		void		clearName(void);							// Want to zero our name out? This'll do it.
-		bool		sameName(ECUname* inName);				// We the same as that guy?
-		bool		isLessThanName(ECUname* inName);		// Are we less than that guy?
+		bool		sameName(netName* inName);				// We the same as that guy?
+		bool		isLessThanName(netName* inName);		// Are we less than that guy?
 		byte*		getName(void);								// 64 bit - Pass back the packed up 64 bits that this makes up as our name.
 		void		setName(byte* namePtr);					// Make this 64 bits our name.
-		void		copyName(ECUname* namePtr);			// Make us a clone of that.
+		void		copyName(netName* namePtr);			// Make us a clone of that.
 		
 		bool		getArbitraryAddrBit(void);				// 1 bit - True, we CAN change our address. 128..247
 		void		setArbitraryAddrBit(bool AABit);		// False, we can't change our own address.
@@ -321,7 +321,7 @@ class ECUname {
 		void		setFunction(byte funct);				// 128+ need other fields for definition.
 		byte		getFunctInst(void);						// 5 bit - Instance of this function. Multi clone ECIUs?
 		void		setFunctInst(byte functInst);			//
-		byte		getECUInst(void);							// 3 bit - What processor instance are we?
+		byte		getECUInst(void);							// 3 bit - What controller instance are we?
 		void		setECUInst(byte inst);					// 
 		uint16_t	getManufCode(void);						// 11 bit - Assigned by committee. Who made this thing?
 		void		setManufCode(uint16_t manufCode);	//
@@ -402,7 +402,7 @@ public:
 
 
 
-//				----- mesgQ. Get 'em and hold 'em in here. -----
+//				----- msgQ. Get 'em and hold 'em in here. -----
 
 
 class msgObj :	public linkListObj,
@@ -413,18 +413,19 @@ class msgObj :	public linkListObj,
 };					
 					
 
-class mesgQ :	public queue {
+class msgQ :	public queue {
 
 public:
-				mesgQ(void);
-	virtual	~mesgQ(void);
+				msgQ(void);
+	virtual	~msgQ(void);
 };
 
 
-//				----- ECU Electronic control unit. -----
+
+//		----- netObj. Base class for allowing navigation of SAE J1939 networks -----
 
 
-// Addressing categories for ECU's. Choose one.
+// Addressing categories for netObj's. Choose one.
 enum addrCat {
 
 	nonConfig,			// Address is hard coded.
@@ -435,103 +436,112 @@ enum addrCat {
 	noAddress			// We have no address, just a listener, or broadcaster.
 };
 
-class CA;
 
-class ECU :	public linkList,
-				public idler,
-				public ECUname {							
+
+class msgHandler;
+
+
+// This is the base class that holds all the logic for navigating an SAE J1939 network.
+// For those of you that are boaters out there. This is the actual network that NMEA 2000
+// uses. Inherit this, create a class that can pass it, and send CAN BUS messages. And you
+// will have an object that lets you read and write stuff on NMEA 2000 networks.
+// 
+// Although the learning curve will most likely give you massive headaches.
+class netObj :	public linkList,
+					public idler,
+					public netName {							
 
 	public:
-				ECU(void);
-	virtual	~ECU(void);
-		
-	
-	virtual	void		begin(ECUname* inName,byte inAddr,addrCat inAddCat);	// Initial setup.
-	virtual	void		addMsgHandler(CA* inCA);										// Add the handlers of the messages you would like to send/receive.
-	
-	virtual  void		sendMsg(message* outMsg)=0;									// You have to fill this one out.
-	virtual  void		handleMsg(message* inMsg);										// When a message comes in, pass it into here.
-				void		checkMessages(void);												// If we have one we'll grab it and dela with it.
-				mesgQ		ourMsgQ;																// A place to store incoming messages.
-				
-				void		setAddrCat(addrCat inAddrCat);								// How we deal with addressing.
-				addrCat	getAddrCat(void);													// See how we deal with addressing.
-				byte		getAddr(void);														// Here's our current address.
-				void		setAddr(byte inAddr);											// Set a new address.
-				
-				// What in the world is going on in there? The "ourState" variable can give a hint.
-				enum		ECUState {
+				enum netObjState {															// Different states we can be in.
 					config,																		// Still on the bench being assembled.
 					startHold,																	// Certain addresses call for a start hold before beginning.
 					arbit,																		// Doing address arbitration.
 					addrErr,																		// Had an address error that we can't fix alone.
 					running																		// Everything seems fine. We're running.
 				};
-				ECUState	ourState;
-				timeObj	holdTimer;
-	
-				void		startHoldTimer(void);											// Calculate and start the address holding time delay. Function of address.
-				void		clearErr(void);													// This will clear the address error and restart the process.
-				void		changeState(ECUState newState);								// Keeping track of what we are up to.
-				void		stateName(ECUState aState);									// state -> "state" kinda' thing for debugging.
-														
-				// arbitraryConfig
-				// Arbitration has a couple wait states.
-				enum		arbitState {
+				
+				enum arbitState {																// Arbitration has it's own set of states.
 					waitingForAddrs,															// Send us your addresses and names has been called. Gather them.
 					waitingForClaim,															// Our address claim has been sent. Wait to see if it is challenged.
 				};	
-				arbitState	ourArbitState;
-				timeObj		arbitTimer;
-				addrList		ourAddrList;
-				bool			isReqAddrClaim(message* inMsg);							// Is this a request for address claimed msg?
-				bool			isAddrClaim(message* inMsg);								// Is this an address claimed msg?
-				bool			isCantClaim(message* inMsg);								// Is this a fail to claim address msg?
-				bool			isCommandedAddr(message* inMsg);							// Is this a commanded address msg?
-				void			handleReqAdderClaim(message* inMsg);					// Handle a request for address claimed msg.
-				void			handleAdderClaim(message* inMsg);						// Handle an address claimed msg.
-				void			handleCantClaim(message* inMsg);							// Handle a failed to claim an address msg.				
-				void			handleComAddr(message* inMsg);							// Handle a commanded address message.
-				void			startClaimTimer(void);										// Calculate and start the claim time delay. Random function.
-				void			startArbit(void);												// From whatever state we are in now, start arbitration.
-				byte			chooseAddr(void);												// We have a list of claimed addresses and a range of allowed addresses. Find one.
-				void			checkArbit(void);												// Arbitration is all about wait states.
-				void			sendRequestForAddressClaim(byte inAddr);				// Tell us your name and address.
-				void			sendAddressClaimed(bool tryFail=true);					// This is our name and address.
-				void			sendCannotClaimAddress(void);								// We can't find an address!
-				void			sendCommandedAddress(byte comAddr);						// HEY YOU! Set this as your address!
+				
+				netObj(void);
+	virtual	~netObj(void);
+	
+	virtual	void		begin(netName* inName,byte inAddr,addrCat inAddCat);	// Initial setup.
+	virtual	void		addMsgHandler(msgHandler* inCA);								// Add the handlers of the messages you would like to send/receive.
+	virtual  void		sendMsg(message* outMsg)=0;									// You have to fill this one out.
+	virtual  void		handleMsg(message* inMsg);										// When a message comes in, pass it into here.
+				void		checkMessages(void);												// If we have one we'll grab it and dela with it.
+				
+				void		startHoldTimer(void);											// Calculate and start the address holding time delay. Function of address.
+				void		clearErr(void);													// This will clear the address error and restart the process.
+				void		changeState(netObjState newState);							// Keeping track of what we are up to.
+				void		stateName(netObjState aState);								// state -> "state" kinda' thing for debugging.
+														
+				void		setAddrCat(addrCat inAddrCat);								// How we deal with addressing.
+				addrCat	getAddrCat(void);													// See how we deal with addressing.
+				void		setAddr(byte inAddr);											// Set a new address.
+				byte		getAddr(void);														// Here's our current address.
+				
+				bool		isReqAddrClaim(message* inMsg);								// Is this a request for address claimed msg?
+				bool		isAddrClaim(message* inMsg);									// Is this an address claimed msg?
+				bool		isCantClaim(message* inMsg);									// Is this a fail to claim address msg?
+				bool		isCommandedAddr(message* inMsg);								// Is this a commanded address msg?
+				void		handleReqAdderClaim(message* inMsg);						// Handle a request for address claimed msg.
+				void		handleAdderClaim(message* inMsg);							// Handle an address claimed msg.
+				void		handleCantClaim(message* inMsg);								// Handle a failed to claim an address msg.				
+				void		handleComAddr(message* inMsg);								// Handle a commanded address message.
+				void		startClaimTimer(void);											// Calculate and start the claim time delay. Random function.
+				void		startArbit(void);													// From whatever state we are in now, start arbitration.
+				byte		chooseAddr(void);													// We have a list of claimed addresses and a range of allowed addresses. Find one.
+				void		checkArbit(void);													// Arbitration is all about wait states.
+				void		sendRequestForAddressClaim(byte inAddr);					// Tell us your name and address.
+				void		sendAddressClaimed(bool tryFail=true);						// This is our name and address.
+				void		sendCannotClaimAddress(void);									// We can't find an address!
+				void		sendCommandedAddress(byte comAddr);							// HEY YOU! Set this as your address!
 				
 	virtual	void			idle(void);
 	
-				addrCat	ourAddrCat;
-				byte		addr;
-				xferList	ourXferList;
+				msgQ			ourMsgQ;															// A place to store incoming messages.
+				
+				netObjState	ourState;														// What state we are in now.
+				timeObj		holdTimer;														// Our timer for startup holding.
+																								
+				addrCat		ourAddrCat;														// How we deal with addressing.
+				byte			addr;																// Our current network address.
+				arbitState	ourArbitState;													// Arbitration has a couple wait states.
+				timeObj		arbitTimer;														// Arbitration timer.
+				addrList		ourAddrList;													// List of used addresses from the network.
+				
+				xferList		ourXferList;													// The transport protocol list. (UNFINISHED)
 };
 
 
 
-//				----- CA Controller application -----
+//				----- msgHandler -----
 
 
-// Controller application.
-class CA :	public linkListObj {	
+// Base class for handling and creation of SAE J1939 network messages. Inherit this create
+// your handler object and add them using the netObj call addMsgHandler().
+class msgHandler :	public linkListObj {	
 
 	public:
-				CA(ECU* inECU);
-				~CA(void);
+				msgHandler(netObj* inNetObj);
+				~msgHandler(void);
 				
 				int	getNumBytes(void);				// These only set the value. No buffer here.
             void	setNumBytes(int inNumBytes);	// The message class reads  and uses this.
-	virtual  bool	handleMsg(message* inMsg);		// Both of these are stubs.
-	virtual  void	sendMsg(void);						// 
+	virtual  bool	handleMsg(message* inMsg);		// Fill in to handle messages.
+	virtual  void	newMsg(void);						// Fill in to create messages.
+	virtual  void	sendMsg(message* inMsg);		// This one just sends messages on their way.
+	
 				void	setSendInterval(float inMs);	// Used for broadcasting.
             float	getSendInterval(void);			//
-	virtual	void	idleTime(void);					// Same as idle, but called by the ECU.
+	virtual	void	idleTime(void);					// Same as idle, but called by the netObj.
 				
-				ECU*		ourECU;			// Pointer to our boss!
-				uint32_t	ourPGN;			// Typically, this is the type of info we understand.
-            int		numBytes;		// How many bytes will the data buffer need?
-				timeObj	intervaTimer;	// If broadcasting, how often do we broadcast? (Ms)
+				netObj*	ourNetObj;						// Pointer to our boss!
+				timeObj	intervaTimer;					// If broadcasting, how often do we broadcast? (Ms)
 };
 
 
