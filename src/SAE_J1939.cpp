@@ -802,16 +802,6 @@ void ECU::changeState(ECUState newState) {
 	}
 }
 
-void msgOut(message* inMsg) {
-	
-	if (inMsg->getSourceAddr()!=35) {
-		Serial.println("-------------------------");
-		inMsg->showMessage();
-		Serial.println();
-		Serial.println();
-	}
-}
-
 
 // We are passed in a message to handle. (From our progeny, or ourselves, if assembled.)
 // Copy it and stuff it in the Q for later.
@@ -976,7 +966,6 @@ void ECU::handleAdderClaim(message* inMsg) {
 void ECU::handleCantClaim(message* inMsg) { }
 
 
-
 // There is a command that sends ECU's new addresses to switch to. We deal with these
 // here.
 void ECU::handleComAddr(message* inMsg) {
@@ -1109,18 +1098,14 @@ void ECU::sendCommandedAddress(byte comAddr) {
 
 // From whatever state we are in now, start arbitration.
 void ECU::startArbit(void) {
-	
-	//Serial.println("**** startArbit() ****");
-	
+		
 	if (addr==NULL_ADDR) {								// If we have no current address..
-		//Serial.println("**** No Addr, start a list.. ****");
 		ourAddrList.dumpList();							// Clear out list of addresses.
 		ourXferList.dumpList();							// Clear out transfer list as well. Can't finish any.
 		sendRequestForAddressClaim(GLOBAL_ADDR);	// Start gathering addresses again.
 		arbitTimer.setTime(250);						// Set the timer.
 		ourArbitState = waitingForAddrs;				// Note that we are gathering addresses again.
 	} else {													// Else we DO have an address..
-		//Serial.println("**** Have Addr, see if it works. ****");
 		sendAddressClaimed();							// See if we can claim what we got.
 		arbitTimer.setTime(250);						// Set the timer.
 		ourArbitState=waitingForClaim;

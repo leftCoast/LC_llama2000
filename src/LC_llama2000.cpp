@@ -316,12 +316,6 @@ airTempBarometer::airTempBarometer(ECU* inECU)
    degF	= 0;
    inHg	= 0;
    inHgSmooth = new runningAvg(6);
-   if (inHgSmooth) {
-   	Serial.println("Got a smoother.");
-
-   } else {
-   	Serial.println("No Smoother!");
-   }
 }
 
 
