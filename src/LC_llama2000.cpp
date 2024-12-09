@@ -313,21 +313,21 @@ bool airTempBarometer::handleMsg(message* inMsg) {
 	success = false;
 	if (inMsg->getPGN()==0x1FD0A) {
    	rawPa32  = pack32(inMsg->getDataByte(6),inMsg->getDataByte(5),inMsg->getDataByte(4),inMsg->getDataByte(3));
-   	if (!isBlank(rawPa32)) {
+   	if (!isBlank(rawPa32)) {								// Make sure the data we want is actually there.
    		Pa	= rawPa32 * 0.1;
    		inHg = inHgSmooth->addData(Pa*0.0002953);
    		success = true;
    	}
    } else if (inMsg->getPGN()==0x1FD06) {
    	rawPa16  = pack16(inMsg->getDataByte(6),inMsg->getDataByte(5));
-   	if (!isBlank(rawPa16)) {
+   	if (!isBlank(rawPa16)) {								// Make sure the data we want is actually there.
    		Pa	= rawPa16 * 100;
    		inHg = inHgSmooth->addData(Pa*0.0002953);
    		success = true;
 		}
    } else if (inMsg->getPGN()==0x1FD07) {
 		rawPa16  =  pack16(inMsg->getDataByte(7),inMsg->getDataByte(6));
-   	if (!isBlank(rawPa16)) {
+   	if (!isBlank(rawPa16)) {								// Make sure the data we want is actually there.
    		Pa	= rawPa16 * 100;
    		inHg = inHgSmooth->addData(Pa*0.0002953);
    		success = true;

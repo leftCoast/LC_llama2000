@@ -4,53 +4,82 @@
 #include <lists.h>
 #include <idlers.h>
 #include <timeObj.h>
-#include <resizeBuff.h>				// Need to objectify this to a base class. Then any chip should work.
+#include <resizeBuff.h>
 
+// If you are reading this and wondering what the heck it all means? Buy this book.
 
-// CAN Header. This is all built on CAN Bus. Each message has a 39 bit header. Pared down
-// to 29 bits of info. Followed by 0..8 bytes data.
+// A Comprehensible Guide to J1939 
+// By Wilfred Voss.
+//
+// This is the book I bought used on Amazon. I thought it was a pretty rough learning
+// curve. But pretty much it's all there. Most websites I've seen that say they are a
+// guide to this stuff are just exact copies of that book.
+//
+//                     +     +     +     +     +     +     +  
+//
+// This (SAE J1939 is all built on CAN Bus. Each message has a 39 bit header. Pared down
+// to 29 bits of message ID info. (Classic CAN has only 11 bits). Followed by 0..8 bytes
+// of data.
 // 
-// PGN - Parameter Group Number. Basically what is this message about.
-class netName;
+// Ok, here's what we end up reading from the CAN BUS chip after what we don't need is
+// stripped out for us. Well, and if we are sending a message, these are what we end up
+// sending as well.
+//
+//  [                       29 bits of CAN ID                            ]       Data
+//  ----------------------------------------------------------------------  -------------
+// |  3 bits  |  6 bits  |   1 bit  |   1 bit   |   1 byte   |   1 byte   | 0 to 8 bytes |
+// | Priority | all zero | reserved | Data page | PF or PDUf | PS or PDUs | message data |
+//             ----------------------------------------------------------
+//                          This underlined section is your PGN
+//
+// This is what we decode into your message. Oh and notice there is 0 to 8 bytes of data
+// coming along with this. The message gets that as well.
+//
+// People go on about the PGN. But, as you can see, that value overlaps (Is a function of)
+// other values and can vary. Not always the best value to use as a message ID. For
+// example the PS part can mean Global address, or specific address, changing the value of
+// the PGN.
+//
+// So the message class here only holds the different parts. When you ask it for a PGN, it
+// calculates one for you from those parts. If you set in a new PGN, it will calculate the
+// different parts that match that PGN back into the message.
+//
+// And, along with all of this, there are some very common control values. Most of the
+// heavy hitters are set out here for use in the code.
+
 
 #define GLOBAL_ADDR		255		// Destination only address. "Hey everyone!"
-#define NULL_ADDR			254		// Source address only. "Hey, listen! But, I have no address."
+#define NULL_ADDR			254		// Source address only. "Hey, I have no address."
 #define REQ_MESSAGE		59904		// Request PGN. "Hey EVERYONE send out your name and address."
 #define ADDR_CLAIMED		60928		// Claimed PGN. "Hey EVERYONE this is my name and address." Or can't claim one.
-#define COMMAND_ADDR		65240		// We were told to use this one.
+#define COMMAND_ADDR		65240		// We were told to use this address.
 #define BAM_COMMAND		60416		// Big load coming! Make room!
 
-#define REQ_ADDR_CLAIM_PF	234	// 0xEA PS = Destination addr.
+#define REQ_ADDR_CLAIM_PF	234	// 0xEA, PS = Destination addr.
 #define BAM_PF					236	// PS = 255 or Destination addr.
-#define ADDR_CLAIMED_PF		238	// 0xEE PS = 255. Works for both (ACK) & (NACK)
+#define ADDR_CLAIMED_PF		238	// 0xEE, PS = 255. Works for both (ACK) & (NACK)
 #define COMMAND_ADDR_PF		254	// PS = 216. Giving PGN of COMMAND_ADDR above.
 
 
-#define DEF_NUM_BYTES	8
-#define DEF_PRIORITY		6
-#define DEF_R				false
-#define DEF_DP				false
+#define DEF_NUM_BYTES	8			// Remember data is 0..8 bytes? Most are 8 bytes. We default to that.
+#define DEF_PRIORITY		6			// Seems that 6 is the preferred default priority.
+#define DEF_R				false		// R (reserved bit) All the doc.s say to leave it as 0.
+#define DEF_DP				false		// DP (Data page) All doc.s say to leave it  as 0. But nearly ALL NMEA 2000 sets it as high order PGN bit (1).
 
-//				----- message -----
+class netName;							// Forward class thing. Don't worry about it.
+class msgHandler;						// And another one. Just look the other way. Maybe hum a little.
 
 
-// Typically unused/filled data bytes are set to 0xFF.
+// Typically unused data bytes are set to 0xFF. These can be used as quick and easy way to
+// test if a field read in from a message, is all set to ones IE : unused.
 
 bool	isBlank(uint8_t inVal);
 bool	isBlank(uint16_t inVal);
 bool	isBlank(uint32_t inVal);
 
 
-// Decoding the 29 bit CAN/J1939 header.
-struct msgHeader {
-	uint32_t  PGN;				// Type of data (Parameter group number)
-	uint8_t   priority;		// CAN priority bits.
-	bool      R;				// Reserve bit.
-	bool      DP;				// Data page.
-	uint8_t   PDUf;			// PDU format
-	uint8_t   PDUs;			// PDU specific.
-	uint8_t   sourceAddr;	// Who sent this?
-};
+
+//				----- message -----
 
 
 class message {
@@ -99,7 +128,9 @@ class message {
 
 //				-----            BAMmsg            -----
 
+
 // [32] [Size LSB] [Size MSB] [numPacks] [0xFF] [PGN LSB] [PGN2] [PGN MSB]
+// NOT FINISHED YET
 
 class BAMmsg :	public message {
 
@@ -118,6 +149,17 @@ class BAMmsg :	public message {
 	
 //				----- netObj name -----
 
+// Another rule of network control is that each object on the network has an address and, 
+// needs to have what they call, it's name. The name is 64 bits long. (Just fits into 8
+// bytes of data) It has 10 fields of information. Some fields are bought from the SAE
+// people for massive amount of cash. Some you choose. Some are configuration values. When
+// one is asked for their address they also hand back in the data bytes their name.
+//
+//                 SAE list               SAE list  SAE   SAE list                        SAE list
+// |    1 bit    |  3 bits  |   4 bits   |7 bits|  1 bit | 8 bits |  5 bits   | 3 bits  | 11 bits  |21 bits|
+// |Can arbitrate|Ind. group|System inst.|System|Reserved|Function|Funct inst.|ECU inst.|Manu. code|ID num |
+//
+// The following is a list of stuff that can go into sections of these names.
 
 // Industry group. These fit an enum well.
 
@@ -295,6 +337,7 @@ enum indGroup {
 
 
 // Packed eight byte set of goodies.
+
 class netName {
 	
 	public:
@@ -303,9 +346,9 @@ class netName {
 		
 		void		clearName(void);							// Want to zero our name out? This'll do it.
 		bool		sameName(netName* inName);				// We the same as that guy?
-		bool		isLessThanName(netName* inName);		// Are we less than that guy?
+		bool		isLessThanName(netName* inName);		// Is our name numerically less than that guy?
 		byte*		getName(void);								// 64 bit - Pass back the packed up 64 bits that this makes up as our name.
-		void		setName(byte* namePtr);					// Make this 64 bits our name.
+		void		setName(byte* namePtr);					// Make this 64 bits, our name.
 		void		copyName(netName* namePtr);			// Make us a clone of that.
 		
 		bool		getArbitraryAddrBit(void);				// 1 bit - True, we CAN change our address. 128..247
@@ -338,6 +381,10 @@ class netName {
 
 //				-----    addrList   &  addrNode    -----
 
+// When wondering if an address is unused, who serves up the best data, where something
+// should be sent.. This is our internal list that show's everyone's address. for now it's
+// used for searching for unused address values. Later we can add the names, and then it'll
+// be a catalog.
 
 class addrNode :	public linkListObj {
 
@@ -369,7 +416,9 @@ public:
 
 //				-----    xferList   &  xferNode    -----
 
-
+// This is work in progress. When needed to send more than eight bytes one needs to do a
+// multi message transmission. This list is to track what multi part messages we are
+// currently active. Either sending or receiving.
 
 class xferNode :	public linkListObj {
 
@@ -404,6 +453,8 @@ public:
 
 //				----- msgQ. Get 'em and hold 'em in here. -----
 
+// The idea is that messages can come in in bursts. Instead of handling each one as it
+// comes in, we just copy them to this queue to be handled as we have time.
 
 class msgObj :	public linkListObj,
 					public message {
@@ -424,6 +475,18 @@ public:
 
 //		----- netObj. Base class for allowing navigation of SAE J1939 networks -----
 
+// This is the part that holds all the logic for the network. You'r controller as it were.
+// It's purely virtual in that you can not create one of these. You have to inherit it as
+// the base of your own class. And the class you create, from this, is responsible for
+// understanding how to work your hardware. How to read CAN messages from it and send CAN
+// messages out of it. The combination of the two give you something that can actively
+// navigate the network.
+//
+// This netObj has the logic to navigate the addressing and maintenance communication. But
+// the actual data messages YOU want to send or receive, need handlers to be written by
+// inheriting msgHandler (below) as their base classes and attached to this netObj class
+// during runtime by calling addMsgHandler() for each.
+
 
 // Addressing categories for netObj's. Choose one.
 enum addrCat {
@@ -433,20 +496,19 @@ enum addrCat {
 	commandConfig,		// We can respond to address change messages.
 	selfConfig,			// We set our own depending on how the network is set up.
 	arbitraryConfig,	// We can do the arbitrary addressing dance.
-	noAddress			// We have no address, just a listener, or broadcaster.
+	noAddress			// We have no address, just a listener?
 };
 
 
 
-class msgHandler;
-
-
 // This is the base class that holds all the logic for navigating an SAE J1939 network.
 // For those of you that are boaters out there. This is the actual network that NMEA 2000
-// uses. Inherit this, create a class that can pass it, and send CAN BUS messages. And you
-// will have an object that lets you read and write stuff on NMEA 2000 networks.
+// uses. Inherit this, create a class that can read in, and send out CAN BUS messages. And
+// you will have an object that lets you read and write stuff on NMEA 2000 networks.
 // 
 // Although the learning curve will most likely give you massive headaches.
+
+
 class netObj :	public linkList,
 					public idler,
 					public netName {							
