@@ -53,22 +53,12 @@ class llama2000 :   public netObj {
 };
 
 
-/*
+
 // ************* msgHandler *************
-//    These are the message handlers.
+//   Below are example message handlers.
 // *************************************
 
-class msgHandler : public CA {
 
-   public:
-            msgHandler(netObj* inNetObj);
-            ~msgHandler(void);
-            
-   virtual  void	sendMsg(message* outMsg);
-            
-};
-
-*/
 
 // ************* waterSpeedObj *************
 
