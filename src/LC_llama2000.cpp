@@ -66,7 +66,7 @@ bool llama2000::begin(int inCSPin) {
 	aName.setVehSys(DEV_CLASS_INST);						//	We are an instrument.
 	aName.setSystemInst(0);									// We are the first of our device class.
 	aName.setIndGroup(Marine);								// What kind of machine are we ridin' on?
-	netObj::begin(&aName,45,arbitraryConfig);				// Here's our name, default address and address category.													
+	netObj::begin(&aName,35,arbitraryConfig);			// Here's our name, default address and address category.													
 	pinMode(resetPin, OUTPUT);								// Setup our reset pin.
 	delay(50);													// Sit for a bit..
 	digitalWrite(resetPin, LOW);							// Set reset low.

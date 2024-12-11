@@ -281,7 +281,8 @@ byte nameBuff[8];		// Global name buffer for when people want to grab the 8 byte
 
 // Packed eight byte set of goodies. We'll preload this with a depth sounder. As an example.
 netName::netName(void) {
-
+	
+	clearName();							// Shut up compiler!
 	setID(0);								// Device ID. We make these up. You get 21 bits.
 	setManufCode(0);						// This would be assigned to you by NMEA people.
 	setECUInst(0);							// First netObj (Electronic control unit.)
@@ -508,9 +509,12 @@ void netName::showName(void) {
 //				-----    addrList   &  addrNode    -----
 
 
-addrNode::addrNode(byte inAddr) 
-	: linkListObj()
-	{ addr = inAddr; }
+addrNode::addrNode(byte inAddr,netName* inName) 
+	: linkListObj() {
+	
+	addr = inAddr;							// Copy the address.
+	name.setName(inName->getName());	// Copy the name.
+}
 
 
 addrNode::~addrNode(void) {  }
@@ -532,7 +536,23 @@ addrList::addrList(void) : linkList() {  }
 addrList::~addrList(void) {  }
 
 
-// Return a pointer to this node if we can find it.
+// Add an address name pair into our list. If it's not already there.
+void addrList::addAddr(byte inAddr,netName* inName) {
+
+	addrNode* newNode;
+	
+	if (inName) {												// Making sure. They think it's funny to slip in a NULL.
+		if (findPair(inAddr,inName)==NULL) {			// If we can't find this pair in there..
+			newNode = new addrNode(inAddr,inName);		// Have a go at creating a new node for them.
+			if (newNode) {										// If we were able to allocate a new node..
+				addToTop(newNode);							// Hook it to the list and we are done!
+			}														//
+		}
+	}
+}
+
+
+// Return a pointer to this node, if we can find it by address.
 addrNode* addrList::findAddr(byte inAddr) {
 
 	addrNode*	trace;
@@ -548,35 +568,58 @@ addrNode* addrList::findAddr(byte inAddr) {
 }
 
 
-// Add an address into our list.	IF it's not already there.
-void addrList::addAddr(byte inAddr) {
+// Return a pointer to this node, if we can find it by name.
+addrNode* addrList::findName(netName* inName) {
 
-	addrNode* newNode;
+	addrNode*	trace;
 	
-	if (findAddr(inAddr)==NULL) {
-		newNode = new addrNode(inAddr);
-		if (newNode) {
-			addToTop(newNode);
+	trace = (addrNode*) getFirst();
+	while(trace) {
+		if (trace->name.sameName(inName)) {
+			return trace;
 		}
+		trace = (addrNode*) trace->getNext();
 	}
+	return trace;
 }
 
 
+// Return a pointer to this node if we can find it by address,name pair.
+addrNode* addrList::findPair(byte inAddr,netName* inName) {
+
+	addrNode*	trace;
+	
+	trace = (addrNode*) getFirst();
+	while(trace) {
+		if (trace->name.sameName(inName) && trace->addr==inAddr) {
+			return trace;
+		}
+		trace = (addrNode*) trace->getNext();
+	}
+	return trace;
+}
+
+
+
 // Let's see the list of addresses we got..
-void addrList::showList(void) {
+void addrList::showList(bool withNames) {
 
 	addrNode* trace;
 	
-	Serial.println("----  Address list ----");
+	Serial.println(   "----  Address list ----");
 	Serial.print("Number items : ");
 	Serial.println(getCount());
 	trace = (addrNode*)getFirst();
 	while(trace) {
-		Serial.print("Address : ");
+		Serial.print("Address         : ");
 		Serial.println(trace->addr);
+		if (withNames) {
+			trace->name.showName();
+			Serial.println();
+			Serial.println(" - - - - - - - - - - - -");
+		}
 		trace = (addrNode*)trace->getNext();
 	}
-	Serial.println();
 }
 		
 
@@ -777,8 +820,36 @@ void netObj::checkMessages(void) {
 		delete(aMsg);
 	}
 }
+
+
+// If we have a device's netName, see if we can find it's address.
+byte netObj::findAddr(netName* inName) {
+
+	addrNode*	aDevice;
 	
+	aDevice = ourAddrList.findName(inName);
+	if (aDevice) {
+		return aDevice->addr;
+	}
+	return NULL_ADDR;
+}
+
+
+// If we have a device's address, see if we can find it's name.
+netName netObj::findName(byte inAddr) {
+
+	addrNode*	aDevice;
+	netName		aName;
 	
+	aName.clearName();
+	aDevice = ourAddrList.findAddr(inAddr);
+	if (aDevice) {
+		aName = aDevice->name;
+	}
+	return aName;
+}
+				
+					
 // Calculate and start the startup time delay. Function of address.
 void netObj::startHoldTimer(void) {
 	
@@ -836,7 +907,6 @@ void netObj::changeState(netObjState newState) {
 			switch(newState) {											// **   And we want to switch to..  **
 				case addrErr	: ourState = addrErr;	break;	// How? Ran out of addresses? (Actually yes)
 				case running	:											// Arbit to running.
-					ourAddrList.dumpList();								// Clear out address list, done with it.
 					ourState = running;									// Ok, we're running.
 				break;														//
 				default			: 								break;	// No other path to take here.
@@ -907,6 +977,18 @@ void netObj::setAddr(byte inAddr) { addr = inAddr; }
 byte netObj::getAddr(void) { return addr; }
 
 
+// Another human readable printout.
+void netObj::showAddrList(bool showNames) {
+	
+	ourAddrList.showList(showNames);
+	Serial.println();
+	Serial.print(  "OUR Addr & name : ");
+	Serial.println(addr);
+	showName();
+	Serial.println();
+}
+
+
 // Request address claimed. Someone is asking for everyone, or us, to show who they are
 // and what address they are holding at this moment.
 bool netObj::isReqAddrClaim(message* inMsg) {
@@ -971,7 +1053,14 @@ void netObj::handleReqAdderClaim(message* inMsg) {
 // address they claimed. If so? We can send back and address claimed?
 void netObj::handleAdderClaim(message* inMsg) {
 
-	ourAddrList.addAddr(inMsg->getSourceAddr());						// In all cases we add this address to our list.
+	netName	aName;
+	byte		buff[8];
+	
+	for(int i=0;i<8;i++) {													// ASSUMING this is addr claim message AND it has it's address..
+		buff[i] = inMsg->getDataByte(i);									// Copy each data byte to our local buffer.
+	}																				//
+	aName.setName(buff);														// netNames can set their values from a byte buffer.
+	ourAddrList.addAddr(inMsg->getSourceAddr(),&aName);			// In all cases we add this address/name pair to our list.
 	switch(ourState) {														// Now, lets see what's what..
 		case arbit		:														// Arbitrating. (We can arbitrate then!)
 			if (inMsg->getSourceAddr()==addr) {							// Claiming our address!?
@@ -1078,7 +1167,6 @@ void netObj::checkArbit(void) {
 	if (ourArbitState==waitingForAddrs) {			// If gathering addresses, to choose a new one..
 		if (arbitTimer.ding()) {						// If gathering's over..
 			arbitTimer.reset();							// Shut off the timer.
-			ourAddrList.showList();						// Well let's see 'em. DEBUGGING
 			addr = chooseAddr();							// Choose an address using the list to compare.
 			if (addr!=NULL_ADDR) {						// If we found an unclaimed one..
 				sendAddressClaimed(true);				// Send address claim on new address.

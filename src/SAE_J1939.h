@@ -372,6 +372,7 @@ class netName {
 		void		setID(uint32_t inID);
 		
 		void		showName(void);							// Human readable printout.
+
 	protected:
 		
 		byte		name[8];										// The stored 8 byte. 64 bit name.
@@ -389,13 +390,14 @@ class netName {
 class addrNode :	public linkListObj {
 
 	public:
-				addrNode(byte inAddr);
+				addrNode(byte inAddr,netName* inName);
 	virtual	~addrNode(void);
 	
 	virtual	bool	isGreaterThan(linkListObj* compObj);	// Are we greater than the obj being passed in?
 	virtual	bool	isLessThan(linkListObj* compObj);		// Are we less than the obj being passed in?
 	
-				byte	addr;
+				byte		addr;
+				netName	name;
 };
 
 
@@ -407,9 +409,12 @@ public:
 				addrList(void);
 	virtual	~addrList(void);
 	
+				void			addAddr(byte inAddr,netName* inName);
 				addrNode*	findAddr(byte inAddr);
-	virtual	void			addAddr(byte inAddr);
-				void			showList(void);
+				addrNode*	findName(netName* inName);
+				addrNode*	findPair(byte inAddr,netName* inName);
+		
+				void			showList(bool withNames=false);
 };
 
 
@@ -535,7 +540,8 @@ class netObj :	public linkList,
 	virtual  void		sendMsg(message* outMsg)=0;									// You have to fill this one out.
 	virtual  void		handleMsg(message* inMsg);										// When a message comes in, pass it into here.
 				void		checkMessages(void);												// If we have one we'll grab it and dela with it.
-				
+				byte		findAddr(netName* inName);										// If we have a device's netName, see if we can find it's address.
+				netName	findName(byte inAddr);											// If we have a device's address, see if we can find it's name.
 				void		startHoldTimer(void);											// Calculate and start the address holding time delay. Function of address.
 				void		clearErr(void);													// This will clear the address error and restart the process.
 				void		changeState(netObjState newState);							// Keeping track of what we are up to.
@@ -545,6 +551,7 @@ class netObj :	public linkList,
 				addrCat	getAddrCat(void);													// See how we deal with addressing.
 				void		setAddr(byte inAddr);											// Set a new address.
 				byte		getAddr(void);														// Here's our current address.
+				void		showAddrList(bool showNames);									// Another human readable printout.
 				
 				bool		isReqAddrClaim(message* inMsg);								// Is this a request for address claimed msg?
 				bool		isAddrClaim(message* inMsg);									// Is this an address claimed msg?
