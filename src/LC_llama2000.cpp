@@ -62,7 +62,7 @@ bool llama2000::begin(int inCSPin) {
 	aName.setManufCode(0);									// This would be assigned to you by NMEA people.
 	aName.setECUInst(0);										// First netObj (Electronic control unit.)
 	aName.setFunctInst(0);									// First depth transducer.
-	aName.setFunction(DEV_FUNC_GP_TRANS);				// Transducer of some sort.
+	aName.setFunction(DEV_FUNC_GP_SENSE);				// Sensor box of some sort.
 	aName.setVehSys(DEV_CLASS_INST);						//	We are an instrument.
 	aName.setSystemInst(0);									// We are the first of our device class.
 	aName.setIndGroup(Marine);								// What kind of machine are we ridin' on?
@@ -114,6 +114,11 @@ void llama2000::recieveMsg(void) {
 			newMsg.setDataByte(i,CAN.read());					// Read and store the byte into the message.
 			i++;															// Bump of the storage index.
 		}																	//
+		if (newMsg.getSourceAddr()!=35) {
+			Serial.print(newMsg.getSourceAddr());
+			Serial.print("\t");
+			Serial.println(newMsg.getPGN());
+		}
 		handleMsg(&newMsg);											// All stored, let our netObj deal with it.
 	}
 }
