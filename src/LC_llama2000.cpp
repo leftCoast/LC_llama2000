@@ -114,11 +114,13 @@ void llama2000::recieveMsg(void) {
 			newMsg.setDataByte(i,CAN.read());					// Read and store the byte into the message.
 			i++;															// Bump of the storage index.
 		}																	//
+		/*
 		if (newMsg.getSourceAddr()!=35) {
 			Serial.print(newMsg.getSourceAddr());
 			Serial.print("\t");
 			Serial.println(newMsg.getPGN());
 		}
+		*/
 		handleMsg(&newMsg);											// All stored, let our netObj deal with it.
 	}
 }
@@ -231,7 +233,7 @@ float waterTempObj::getTemp(void) { return degF; }
    
 	fluidType	= fuel;  // This is 0.
    level       = 0;
-   setSendInterval(2500);
+   setSendInterval(0/*2500*/);
 }
  
 
@@ -249,7 +251,19 @@ float fluidLevelObj::getCapacity(void) { return capacity; }
 
 void fluidLevelObj::setCapacity(float inCapacity) { capacity = inCapacity; }
 
+bool fluidLevelObj::handleMsg(message* inMsg) {
 
+   unsigned int rawTemp;
+
+	if (inMsg->getSourceAddr()==187) {
+		inMsg->showMessage();
+		Serial.println();
+		return true;
+	}
+	return false;
+}
+	
+	
 void fluidLevelObj::newMsg(void) {
    
    int16_t  tempInt;

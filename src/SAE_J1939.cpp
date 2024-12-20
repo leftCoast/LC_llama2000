@@ -1,15 +1,15 @@
 #include <SAE_J1939.h>
 
 
+
+// ***************************************************************************************
 //				----- message class -----
+// ***************************************************************************************
 
 
 bool	isBlank(uint8_t inVal)  { return inVal==0xFF; }
 bool	isBlank(uint16_t inVal) { return inVal==0xFFFF; }
 bool	isBlank(uint32_t inVal) { return inVal==0xFFFFFFFF; }
-
-
-byte dataCopy[8];
 
 
 message::message(int inNumBytes) {
@@ -200,9 +200,9 @@ void message::showMessage(void) {
 }
 
 
-
+// ***************************************************************************************
 //				-----            BAMmsg            -----
-
+// ***************************************************************************************
 
 // [32] [Size LSB] [Size MSB] [numPacks] [0xFF] [PGN LSB] [PGN2] [PGN MSB]
 
@@ -273,21 +273,24 @@ uint32_t BAMmsg::getBAMPGN(void) {
 
 
 
-//  -----------  netName class  -----------
+// ***************************************************************************************
+//                       -----------  netName class  -----------
+// ***************************************************************************************
 
 
 byte nameBuff[8];		// Global name buffer for when people want to grab the 8 bytes from the netName class.
 
 
-// Packed eight byte set of goodies. We'll preload this with a depth sounder. As an example.
+// Packed eight byte set of goodies. We'll preload this with a General purpose transducer.
+// As an example.
 netName::netName(void) {
 	
-	clearName();							// Shut up compiler!
+	clearName(false);						// Shut up compiler!
 	setID(0);								// Device ID. We make these up. You get 21 bits.
 	setManufCode(0);						// This would be assigned to you by NMEA people.
 	setECUInst(0);							// First netObj (Electronic control unit.)
-	setFunctInst(0);						// First depth transducer.
-	setFunction(DEV_FUNC_GP_TRANS);	// Depth transducer.
+	setFunctInst(0);						// First transducer.
+	setFunction(DEV_FUNC_GP_TRANS);	// General purpose transducer.
 												// Some spare bit here..
 	setVehSys(DEV_CLASS_INST);			//	We are an instrument.
 	setSystemInst(0);						// We are the first of our device class.
@@ -295,14 +298,26 @@ netName::netName(void) {
 	//setArbitraryAddrBit(?);			// Will be set when we choose our addressing mode.
 }
 
+
+// We allocate nothing, we need to recycle nothing.
 netName::~netName(void) {  }
 
 
-// Just in case you need to clear it out.
-void netName::clearName(void) {
+// Want to zero or max out our name? This'll do it. Why either? Some like it hot.. No
+// really some like to set zero's as a starting point. But many actually like to set 255
+// as a flag that this data is not being used and should be ignored. So this should be
+// helpful for both.
+void netName::clearName(bool hiLow) {
 
+	byte value;
+	
+	if (hiLow) {
+		value = 0xFF;
+	} else {
+		value = 0x00;
+	}
 	for(int i=0;i<8;i++) {
-		name[i] = 0;
+		name[i] = value;
 	}
 }
 
@@ -317,10 +332,10 @@ bool netName::sameName(netName* inName) {
 }
 
 
-// Are we less than that guy?
+// Are we less than that guy? Meaning, we win arbitration of names.
 bool netName::isLessThanName(netName* inName) {
 
-	for(int i=0;i<8;i++) {											// For each byte
+	for(int i=7;i>=0;i++) {										// For each byte
 		if (name[i] < inName->name[i]) return true;		// First non equal, we are less? Bail with true.
 		if (name[i] > inName->name[i]) return false;		// First non equal, we are greater? Bail with false.
 	}																	//
@@ -328,7 +343,7 @@ bool netName::isLessThanName(netName* inName) {
 }
 
 				
-// 64 bit - Pass back ta copy of the 64 bits that this makes up as our name.
+// 64 bit - Pass back a copy of the 64 bits that this makes up as our name.
 byte* netName::getName(void) {						
 	for (int i=0;i<8;i++) {
 		nameBuff[i] = name[i];
@@ -483,7 +498,7 @@ void netName::showName(void) {
 	Serial.print("Manuf code      : "); Serial.println(getManufCode());	// Who made you?					
 	Serial.print("ECU Inst.       : "); Serial.println(getECUInst());		// What netObj# are you?
 	Serial.print("Funct. Inst.    : "); Serial.println(getFunctInst());	// What # of your thing are you?
-	Serial.print("Actual Funct.   : "); Serial.println(getFunction());	// Depth transducer.
+	Serial.print("Actual Funct.   : "); Serial.println(getFunction());	// Depth transducer. Or whatever.
 																								// Some spare bit here..
 	Serial.print("Kind of Funct.  : "); Serial.println(getVehSys());		//	We are an..?
 	Serial.print("Item Inst.      : "); Serial.println(getSystemInst());	// We are the ? of our device class.
@@ -505,9 +520,9 @@ void netName::showName(void) {
 }
 
 
-
-//				-----    addrList   &  addrNode    -----
-
+// ***************************************************************************************
+//				           -----    addrList   &  addrNode    -----
+// ***************************************************************************************
 
 addrNode::addrNode(byte inAddr,netName* inName) 
 	: linkListObj() {
@@ -622,10 +637,21 @@ void addrList::showList(bool withNames) {
 	}
 }
 		
+// ***************************************************************************************
+//				          -----    xferList   &  xferNode    -----
+// ***************************************************************************************
 
-//				-----    xferList   &  xferNode    -----
+
+// Our four starting points.
+enum xferTypes {
+	broadcastIn,	// We receive a BAM message.
+	broadcastOut,	// We create a BAM message.
+	peer2PeerIn,	// We receive a "request to send" from a peer.
+	peer2PeerOut	// We send "request to send" to peer.
+};
 
 
+ 
 // As this is currently written, once we receive a BAM message, we own it. We will delete
 // it when we are done with it.
 xferNode::xferNode(BAMmsg* inMsg,bool inRecieve)
@@ -708,9 +734,9 @@ void  xferList::idle(void) {
 }
 
 
-
-//				----- mesgQ. Hold 'em in here. -----
-
+// ***************************************************************************************
+//				              ----- mesgQ. Hold 'em in here. -----
+// ***************************************************************************************
 
 
 msgObj::msgObj(message* inMsg)
@@ -727,9 +753,9 @@ msgQ::msgQ(void) {  }
 msgQ::~msgQ(void) {  }
 
 
-
+// ***************************************************************************************
 //		----- netObj. Base class for allowing navigation of SAE J1939 networks -----
-
+// ***************************************************************************************
 						
 netObj::netObj(void)
 	: linkList(), idler() {
@@ -820,35 +846,7 @@ void netObj::checkMessages(void) {
 		delete(aMsg);
 	}
 }
-
-
-// If we have a device's netName, see if we can find it's address.
-byte netObj::findAddr(netName* inName) {
-
-	addrNode*	aDevice;
-	
-	aDevice = ourAddrList.findName(inName);
-	if (aDevice) {
-		return aDevice->addr;
-	}
-	return NULL_ADDR;
-}
-
-
-// If we have a device's address, see if we can find it's name.
-netName netObj::findName(byte inAddr) {
-
-	addrNode*	aDevice;
-	netName		aName;
-	
-	aName.clearName();
-	aDevice = ourAddrList.findAddr(inAddr);
-	if (aDevice) {
-		aName = aDevice->name;
-	}
-	return aName;
-}
-				
+			
 					
 // Calculate and start the startup time delay. Function of address.
 void netObj::startHoldTimer(void) {
@@ -975,6 +973,34 @@ void netObj::setAddr(byte inAddr) { addr = inAddr; }
 
 // Here's our address.
 byte netObj::getAddr(void) { return addr; }
+
+
+// If we have a device's netName, see if we can find it's address.
+byte netObj::findAddr(netName* inName) {
+
+	addrNode*	aDevice;
+	
+	aDevice = ourAddrList.findName(inName);
+	if (aDevice) {
+		return aDevice->addr;
+	}
+	return NULL_ADDR;
+}
+
+
+// If we have a device's address, see if we can find it's name.
+netName netObj::findName(byte inAddr) {
+
+	addrNode*	aDevice;
+	netName		aName;
+	
+	aName.clearName(false);
+	aDevice = ourAddrList.findAddr(inAddr);
+	if (aDevice) {
+		aName = aDevice->name;
+	}
+	return aName;
+}
 
 
 // Another human readable printout.
@@ -1282,9 +1308,9 @@ void netObj::idle(void) {
 }
 
 
-		
-//  -----------  msgHandler class  -----------
-
+// ***************************************************************************************		
+//                     -----------  msgHandler class  -----------
+// ***************************************************************************************
 
 msgHandler::msgHandler(netObj* inNetObj)
 	: linkListObj() {

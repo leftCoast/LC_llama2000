@@ -32,8 +32,8 @@
 //             ----------------------------------------------------------
 //                          This underlined section is your PGN
 //
-// This is what we decode into your message. Oh and notice there is 0 to 8 bytes of data
-// coming along with this. The message gets that as well.
+// This is what we decode into your message object. Oh and notice there is 0 to 8 bytes of
+// data coming along with this. The message gets that as well.
 //
 // People go on about the PGN. But, as you can see, that value overlaps (Is a function of)
 // other values and can vary. Not always the best value to use as a message ID. For
@@ -79,7 +79,9 @@ bool	isBlank(uint32_t inVal);
 
 
 
+// ***************************************************************************************
 //				----- message -----
+// ***************************************************************************************
 
 
 class message {
@@ -126,9 +128,12 @@ class message {
 
 
 
-//				-----            BAMmsg            -----
+// ***************************************************************************************
+//				          -----            BAMmsg            -----
+// ***************************************************************************************
 
-
+// I may delet this bit.
+//
 // [32] [Size LSB] [Size MSB] [numPacks] [0xFF] [PGN LSB] [PGN2] [PGN MSB]
 // NOT FINISHED YET
 
@@ -146,8 +151,11 @@ class BAMmsg :	public message {
 };
 
 
-	
-//				----- netObj name -----
+
+// ***************************************************************************************
+//				                   ----- netObj name -----
+// ***************************************************************************************
+
 
 // Another rule of network control is that each object on the network has an address and, 
 // needs to have what they call, it's name. The name is 64 bits long. (Just fits into 8
@@ -157,7 +165,7 @@ class BAMmsg :	public message {
 //
 //                 SAE list               SAE list  SAE   SAE list                        SAE list
 // |    1 bit    |  3 bits  |   4 bits   |7 bits|  1 bit | 8 bits |  5 bits   | 3 bits  | 11 bits  |21 bits|
-// |Can arbitrate|Ind. group|System inst.|System|Reserved|Function|Funct inst.|ECU inst.|Manu. code|ID num |
+// |Can arbitrate|Ind. group|System inst.|Class |Reserved|Function|Funct inst.|ECU inst.|Manu. code|ID num |
 //
 // The following is a list of stuff that can go into sections of these names.
 
@@ -174,7 +182,7 @@ enum indGroup {
 };
 
 
-// deviceClass values. These values are NOT uniform. So, we'll do the #define thing.
+// Device Class values. These values are NOT uniform. So, we'll do the #define thing.
 
 #define	DEV_CLASS_RES			0		// Reserved for 2000 Use
 #define	DEV_CLASS_SYS_TOOLS	10		// System tools
@@ -196,7 +204,8 @@ enum indGroup {
 #define	DEV_CLASS_ENT			125	// Entertainment
 
 
-// Device function.. OH lord! These are listed by.. deviceClass.
+// Device function.. OH lord! These are listed by.. Device Class. They are like the low
+// order byte of device.
 
 //  DEV_CLASS_SYS_TOOLS
 #define	DEV_FUNC_DIAG			130	// Diagnostic.
@@ -336,7 +345,7 @@ enum indGroup {
 #define	DEV_FUNC_MEDIA_CONT	140	// Multimedia Controller
 
 
-// Packed eight byte set of goodies.
+// netName a packed eight byte set of goodies.
 
 class netName {
 	
@@ -344,7 +353,7 @@ class netName {
 					netName(void);
 	virtual		~netName(void);
 		
-		void		clearName(void);							// Want to zero our name out? This'll do it.
+		void		clearName(bool hiLow);					// Want to zero or max out our name? This'll do it.
 		bool		sameName(netName* inName);				// We the same as that guy?
 		bool		isLessThanName(netName* inName);		// Is our name numerically less than that guy?
 		byte*		getName(void);								// 64 bit - Pass back the packed up 64 bits that this makes up as our name.
@@ -380,7 +389,10 @@ class netName {
 
 
 
+// ***************************************************************************************
 //				-----    addrList   &  addrNode    -----
+// ***************************************************************************************
+
 
 // When wondering if an address is unused, who serves up the best data, where something
 // should be sent.. This is our internal list that show's everyone's address. for now it's
@@ -419,7 +431,10 @@ public:
 
 
 
+// ***************************************************************************************
 //				-----    xferList   &  xferNode    -----
+// ***************************************************************************************
+
 
 // This is work in progress. When needed to send more than eight bytes one needs to do a
 // multi message transmission. This list is to track what multi part messages we are
@@ -456,7 +471,10 @@ public:
 
 
 
-//				----- msgQ. Get 'em and hold 'em in here. -----
+// ***************************************************************************************
+//				          ----- msgQ. Get 'em and hold 'em in here. -----
+// ***************************************************************************************
+
 
 // The idea is that messages can come in in bursts. Instead of handling each one as it
 // comes in, we just copy them to this queue to be handled as we have time.
@@ -478,7 +496,10 @@ public:
 
 
 
+// ***************************************************************************************
 //		----- netObj. Base class for allowing navigation of SAE J1939 networks -----
+// ***************************************************************************************
+
 
 // This is the part that holds all the logic for the network. You'r controller as it were.
 // It's purely virtual in that you can not create one of these. You have to inherit it as
@@ -540,8 +561,6 @@ class netObj :	public linkList,
 	virtual  void		sendMsg(message* outMsg)=0;									// You have to fill this one out.
 	virtual  void		handleMsg(message* inMsg);										// When a message comes in, pass it into here.
 				void		checkMessages(void);												// If we have one we'll grab it and dela with it.
-				byte		findAddr(netName* inName);										// If we have a device's netName, see if we can find it's address.
-				netName	findName(byte inAddr);											// If we have a device's address, see if we can find it's name.
 				void		startHoldTimer(void);											// Calculate and start the address holding time delay. Function of address.
 				void		clearErr(void);													// This will clear the address error and restart the process.
 				void		changeState(netObjState newState);							// Keeping track of what we are up to.
@@ -551,6 +570,8 @@ class netObj :	public linkList,
 				addrCat	getAddrCat(void);													// See how we deal with addressing.
 				void		setAddr(byte inAddr);											// Set a new address.
 				byte		getAddr(void);														// Here's our current address.
+				byte		findAddr(netName* inName);										// If we have a device's netName, see if we can find it's address.
+				netName	findName(byte inAddr);											// If we have a device's address, see if we can find it's name.
 				void		showAddrList(bool showNames);									// Another human readable printout.
 				
 				bool		isReqAddrClaim(message* inMsg);								// Is this a request for address claimed msg?
@@ -588,7 +609,9 @@ class netObj :	public linkList,
 
 
 
-//				----- msgHandler -----
+// ***************************************************************************************
+//				                   ----- msgHandler -----
+// ***************************************************************************************
 
 
 // Base class for handling and creation of SAE J1939 network messages. Inherit this create
