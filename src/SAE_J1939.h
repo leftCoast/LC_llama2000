@@ -443,7 +443,7 @@ public:
 class xferNode :	public linkListObj {
 
 	public:
-				xferNode(BAMmsg* inMsg,bool inRecieve);
+				xferNode(message* inMsg,bool inRecieve);
 	virtual	~xferNode(void);
 	
 	virtual	void	idleTime(void);
@@ -464,7 +464,7 @@ public:
 				xferList(void);
 	virtual	~xferList(void);
 	
-	virtual	void	addXfer(BAMmsg* inMsg,bool inRecieve);
+	virtual	void	addXfer(message* inMsg,bool inRecieve);
 				void	listCleanup(void);
 	virtual	void  idle(void);
 };
@@ -558,9 +558,10 @@ class netObj :	public linkList,
 	
 	virtual	void		begin(netName* inName,byte inAddr,addrCat inAddCat);	// Initial setup.
 	virtual	void		addMsgHandler(msgHandler* inCA);								// Add the handlers of the messages you would like to send/receive.
-	virtual  void		sendMsg(message* outMsg)=0;									// You have to fill this one out.
-	virtual  void		handleMsg(message* inMsg);										// When a message comes in, pass it into here.
-				void		checkMessages(void);												// If we have one we'll grab it and dela with it.
+	virtual  void		sendMsg(message* outMsg)=0;									// You have to fill this one out. (8 or less data bytes)
+	virtual  void		incomingMsg(message* inMsg);									// When a message comes in from the net, pass it in here. -(8 or less data bytes)-
+	virtual  void		outgoingingMsg(message* inMsg);								// When we want a message sent out, pass it in here. -(Can have > 8 data bytes)-
+				void		checkMessages(void);												// If we have one we'll grab it and deal with it. -(Can have > 8 data bytes)-
 				void		startHoldTimer(void);											// Calculate and start the address holding time delay. Function of address.
 				void		clearErr(void);													// This will clear the address error and restart the process.
 				void		changeState(netObjState newState);							// Keeping track of what we are up to.

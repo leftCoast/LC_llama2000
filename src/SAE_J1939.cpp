@@ -788,16 +788,30 @@ void netObj::addMsgHandler(msgHandler* inHanldler) {
 }
 
 
-// We are passed in a message to handle. (From our progeny, or ourselves, if assembled.)
-// Copy it and stuff it in the Q for later.
-void netObj::handleMsg(message* inMsg) {
+// When a message comes in from the net, pass it in here. -(8 or less data bytes)-
+void netObj::incomingMsg(message* inMsg) {
 
 	msgObj*	newMsg;
 	
-	if (inMsg) {
-		newMsg = new msgObj(inMsg);
-		if (newMsg) {
-			ourMsgQ.push(newMsg);
+	if (inMsg) {											// First sanity. Did they slip us a NULL?
+		if (!ourXferList->handledMsg(inMsg)) {		// Not NULL. If the xfer list doesn't want it..
+			newMsg = new msgObj(inMsg);				// Make up a msgObj and stuff it in there.
+			if (newMsg) {									// Got one?
+				ourMsgQ.push(newMsg);					// Stuff it into the queue.
+			}
+		}
+	}
+}
+
+
+// When we want a message sent out, pass it in here. -(Can have > 8 data bytes)-
+void netObj::outgoingingMsg(message* outMsg) {
+
+	if (inMsg) {											// First sanity. Always check for NULL.
+		if (outMsg->getnumBytes()>8) {				// Ok, If we have more than 8 databytes..
+			ourXferList->addXfer(outMsg,false);		// Pass the message over to the xfer list.
+		} else {												// Else, we are within 8 data bytes limit..
+			sendMsg(outMsg);								// Shove the message out the wire.
 		}
 	}
 }
@@ -805,12 +819,12 @@ void netObj::handleMsg(message* inMsg) {
 
 // First  we see if it's a network task that we have to handle ourselves. Then, if not, we
 // ask each the handlers if one of them can handle it. Once a msgHandler handles it, or
-// none will. We are done.	
+// none will. We are done.	-(Can have > 8 data bytes)-
 void netObj::checkMessages(void) {
 
-	msgObj*	aMsg;
+	msgObj*			aMsg;
 	msgHandler*		trace;
-	bool		done;
+	bool				done;
 	
 	aMsg = (msgObj*)ourMsgQ.pop();
 	if (aMsg) {
@@ -1332,7 +1346,7 @@ void msgHandler::newMsg(void) { }
 
 
 // The created messages are sent by this guy.
-void msgHandler::sendMsg(message* inMsg) { ourNetObj->sendMsg(inMsg); }
+void msgHandler::sendMsg(message* inMsg) { ourNetObj->outgoingingMsg(inMsg); }
 
 
 // Broadcasting typically is done on a clock. Set the time interval with this call.
