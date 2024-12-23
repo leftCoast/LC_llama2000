@@ -68,7 +68,7 @@
 
 class netName;							// Forward class thing. Don't worry about it.
 class msgHandler;						// And another one. Just look the other way. Maybe hum a little.
-
+class netObj;							// These things seem to breed..
 
 // Typically unused data bytes are set to 0xFF. These can be used as quick and easy way to
 // test if a field read in from a message, is all set to ones IE : unused.
@@ -127,7 +127,7 @@ class message {
 };
 
 
-
+/*
 // ***************************************************************************************
 //				          -----            BAMmsg            -----
 // ***************************************************************************************
@@ -149,11 +149,10 @@ class BAMmsg :	public message {
 				byte		getBAMNumPacks(void);
 				uint32_t	getBAMPGN(void);
 };
-
-
+*/
 
 // ***************************************************************************************
-//				                   ----- netObj name -----
+//				                   ----- netName -----
 // ***************************************************************************************
 
 
@@ -394,10 +393,10 @@ class netName {
 // ***************************************************************************************
 
 
-// When wondering if an address is unused, who serves up the best data, where something
-// should be sent.. This is our internal list that show's everyone's address. for now it's
-// used for searching for unused address values. Later we can add the names, and then it'll
-// be a catalog.
+// When wondering if an address is unused? Who serves up the best data? Where something
+// should be sent? This is our internal list that show's everyone's address. for now it's
+// used for searching for unused address values. Later we can add the names, and then
+// it'll be a catalog.
 
 class addrNode :	public linkListObj {
 
@@ -437,24 +436,82 @@ public:
 
 
 // This is work in progress. When needed to send more than eight bytes one needs to do a
-// multi message transmission. This list is to track what multi part messages we are
+// multi message transmission. This list is to track what multi part messages that are
 // currently active. Either sending or receiving.
 
+
+// Our four types/starting points.
+enum xferTypes {
+	broadcastIn,	// We receive a BAM message.
+	broadcastOut,	// We create a BAM message.
+	peerToPeerIn,	// We receive a "request to send" from a peer.
+	peerToPeerOut	// We send "request to send" to peer.
+};
+
+
+// Pure virtual base class to a transfer node. Think of it kinda' like a process thread.
+// We'll spawn one when we need to do a multi transfer. Then delete it when the transfer
+// is complete.
 class xferNode :	public linkListObj {
 
 	public:
-				xferNode(message* inMsg,bool inRecieve);
+				xferNode(message* inMsg);
 	virtual	~xferNode(void);
 	
-	virtual	void	idleTime(void);
+	virtual	void	idleTime(void)=0;
+	virtual	bool	handleMsg(message* inMsg,bool received)=0;
 	
-	BAMmsg*	msg;
-	byte*		buff;
-	int		numBytes;
-	bool		complete;
-	bool		recieve;
+				message*		msg;
+				bool			complete;
 };
 
+
+class outgoingBroadcast :	public xferNode {
+
+	public:
+				outgoingBroadcast(message* inMsg);
+	virtual	~outgoingBroadcast(void);
+	
+	virtual	bool	handleMsg(message* inMsg,bool received);
+	virtual	void	idleTime(void);
+
+};
+
+
+class outgoingPeerToPeer :	public xferNode {
+
+	public:
+				outgoingPeerToPeer(message* inMsg);
+	virtual	~outgoingPeerToPeer(void);
+	
+	virtual	bool	handleMsg(message* inMsg,bool received);
+	virtual	void	idleTime(void);
+
+};
+
+
+class incomingBroadcast :	public xferNode {
+
+	public:
+				incomingBroadcast(message* inMsg);
+	virtual	~incomingBroadcast(void);
+	
+	virtual	bool	handleMsg(message* inMsg,bool received);
+	virtual	void	idleTime(void);
+
+};
+
+
+class incomingPeerToPeer :	public xferNode {
+
+	public:
+				incomingPeerToPeer(message* inMsg);
+	virtual	~incomingPeerToPeer(void);
+	
+	virtual	bool	handleMsg(message* inMsg,bool received);
+	virtual	void	idleTime(void);
+
+};
 
 
 class xferList :	public linkList,
@@ -464,9 +521,13 @@ public:
 				xferList(void);
 	virtual	~xferList(void);
 	
-	virtual	void	addXfer(message* inMsg,bool inRecieve);
+				void	begin(netObj* inNetObj);
+	virtual	void	addXfer(message* ioMsg,xferTypes xferType);
+				bool	handledMsg(message* ioMsg,bool receive);
 				void	listCleanup(void);
 	virtual	void  idle(void);
+	
+				netObj*	ourNetObj;
 };
 
 

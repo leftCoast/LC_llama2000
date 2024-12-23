@@ -114,14 +114,7 @@ void llama2000::recieveMsg(void) {
 			newMsg.setDataByte(i,CAN.read());					// Read and store the byte into the message.
 			i++;															// Bump of the storage index.
 		}																	//
-		/*
-		if (newMsg.getSourceAddr()!=35) {
-			Serial.print(newMsg.getSourceAddr());
-			Serial.print("\t");
-			Serial.println(newMsg.getPGN());
-		}
-		*/
-		handleMsg(&newMsg);											// All stored, let our netObj deal with it.
+		incomingMsg(&newMsg);										// All stored, let our netObj deal with it.
 	}
 }
 
@@ -251,9 +244,9 @@ float fluidLevelObj::getCapacity(void) { return capacity; }
 
 void fluidLevelObj::setCapacity(float inCapacity) { capacity = inCapacity; }
 
-bool fluidLevelObj::handleMsg(message* inMsg) {
 
-   unsigned int rawTemp;
+// Using this guy to debug/see wwhat's going on with the fuel sensor. Looks like all it gives me is zeros.
+bool fluidLevelObj::handleMsg(message* inMsg) {
 
 	if (inMsg->getSourceAddr()==187) {
 		inMsg->showMessage();

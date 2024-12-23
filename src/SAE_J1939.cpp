@@ -199,9 +199,9 @@ void message::showMessage(void) {
 	*/
 }
 
-
+/*
 // ***************************************************************************************
-//				-----            BAMmsg            -----
+//				          -----            BAMmsg            -----
 // ***************************************************************************************
 
 // [32] [Size LSB] [Size MSB] [numPacks] [0xFF] [PGN LSB] [PGN2] [PGN MSB]
@@ -271,7 +271,7 @@ uint32_t BAMmsg::getBAMPGN(void) {
 	return PGN;
 }
 
-
+*/
 
 // ***************************************************************************************
 //                       -----------  netName class  -----------
@@ -636,68 +636,207 @@ void addrList::showList(bool withNames) {
 		trace = (addrNode*)trace->getNext();
 	}
 }
+
+
 		
 // ***************************************************************************************
 //				          -----    xferList   &  xferNode    -----
 // ***************************************************************************************
 
 
-// Our four starting points.
-enum xferTypes {
-	broadcastIn,	// We receive a BAM message.
-	broadcastOut,	// We create a BAM message.
-	peer2PeerIn,	// We receive a "request to send" from a peer.
-	peer2PeerOut	// We send "request to send" to peer.
-};
 
-
- 
-// As this is currently written, once we receive a BAM message, we own it. We will delete
-// it when we are done with it.
-xferNode::xferNode(BAMmsg* inMsg,bool inRecieve)
+// Setting up the base goodies. A copy of the initial message. Setting the complete
+// variable..
+xferNode::xferNode(message* inMsg)
 	: linkListObj() {
 	
-	msg = inMsg;
-	recieve = inRecieve;
-	buff = NULL;
-	numBytes = 0;
-	complete = true;
+	msg = new message(inMsg);
 	if (msg) {
-		if (resizeBuff(msg->getBAMNumBytes(),&buff)) {
-			numBytes = msg->getBAMNumBytes();
-			complete = false;
-		}
+		complete = false;
+	} else {
+		complete = true;
 	}
 }
 	
 
-// Here is where we delete the BAM message. Just so you know.	
-xferNode::~xferNode(void) {
-
-	resizeBuff(0,&buff);			// Recycle our buffer.
-	if (msg) delete(msg);		// Recycle the BAM message.
-}
+// Here is where we delete the initial message. Just so you know.	
+xferNode::~xferNode(void) { if (msg) delete(msg); } // Recycle the initial message.
 
 
-// If we have things we need to do at certain times? They happend here.
-void xferNode::idleTime(void) {
+
+//				          -----    outgoingBroadcast    -----
 
 
-}
+outgoingBroadcast::outgoingBroadcast(message* inMsg)
+	: xferNode(inMsg) {  }
+	
+	
+outgoingBroadcast::~outgoingBroadcast(void) {  }
 	
 
+bool outgoingBroadcast::handleMsg(message* inMsg,bool received) {
+	
+	return false;
+}
+
+		
+void outgoingBroadcast::idleTime(void) {
+	
+	
+}
+
+
+
+//				          -----    outgoingPeerToPeer    -----
+
+
+outgoingPeerToPeer::outgoingPeerToPeer(message* inMsg)
+	: xferNode(inMsg) {  }
+	
+	
+outgoingPeerToPeer::~outgoingPeerToPeer(void) {  }
+
+	
+bool outgoingPeerToPeer::handleMsg(message* inMsg,bool received) {
+
+	return false;
+}
+
+	
+void outgoingPeerToPeer::idleTime(void) {
+
+}
+
+
+
+//				          -----    incomingBroadcast    -----
+
+
+incomingBroadcast::incomingBroadcast(message* inMsg)
+	: xferNode(inMsg) {  }
+	
+	
+incomingBroadcast::~incomingBroadcast(void) { }
+	
+
+bool incomingBroadcast::handleMsg(message* inMsg,bool received) {
+
+	return false;
+}	
+
+
+void incomingBroadcast::idleTime(void) {
+
+}
+
+
+
+//				         -----    incomingPeerToPeer    -----
+
+
+incomingPeerToPeer::incomingPeerToPeer(message* inMsg)
+	: xferNode(inMsg) {  }
+	
+	
+incomingPeerToPeer::~incomingPeerToPeer(void) { }
+
+	
+bool incomingPeerToPeer::handleMsg(message* inMsg,bool received) {
+
+	return false;
+}
+
+
+void incomingPeerToPeer::idleTime(void) {
+
+}
+
+
+
+//				            -----    xferList    -----
 
 
 xferList::xferList(void)
-	: linkList(), idler() {  }
+	: linkList(), idler() { ourNetObj = NULL; }
 	
 	
 xferList::~xferList(void) {  }
 
 
-// Either we create an outgoing BAM message or we receive in incoming BAM message. Toss it
-// in here.
-void xferList::addXfer(BAMmsg* inMsg,bool inRecieve) {  }
+void xferList::begin(netObj* inNetObj) { ourNetObj = inNetObj; }
+
+
+// Either we create a new outgoing extended message. Or, we received from the net a new
+// incoming extended message. Create the suitable handler node with the initial message
+// that started it. Then, add this new node to the xferNode list.
+void xferList::addXfer(message* ioMsg,xferTypes xferType) {
+
+	xferNode*	newXferNode;
+	
+	newXferNode = NULL;
+	switch(xferType) {
+		case broadcastIn		:	// We received a "BAM message".
+			newXferNode = (xferNode*) new incomingBroadcast(ioMsg);
+		break;
+		case broadcastOut		:	// We created a "BAM message".
+			newXferNode = (xferNode*) new outgoingBroadcast(ioMsg);
+		break;
+		case peerToPeerIn		:	// We received a "request to send" from a peer.
+			newXferNode = (xferNode*) new incomingPeerToPeer(ioMsg);
+		break;
+		case peerToPeerOut	:	// We created a "request to send" for a peer.
+			newXferNode = (xferNode*) new outgoingPeerToPeer(ioMsg);
+		break;
+	}
+	if (newXferNode) {
+		addToTop(newXferNode);
+	}
+}
+
+
+// Ok, a message has come in from either the net, OR, we wrote it. It could be a start of
+// a transfer we need to deal with. It could be part of a message we are already dealing
+// with. Most likely it's nothing that concerns us. But, we get first right of refusal. So
+// lets have a look at it.
+bool  xferList::handledMsg(message* ioMsg,bool received) {
+
+	xferNode*	trace;
+	bool			handled;
+	
+	handled = false;															// Assume we don't handle this.
+	if (ioMsg && ourNetObj) {												// Sanity first, is it not NULL? Is netObj not NULL?
+		if (received) {														// If its from the net..
+			if (ioMsg->getPDUf()==BAM_PF) {								// If we have an incoming BAM message..
+				if (ioMsg->getPDUs()==GLOBAL_ADDR) {					// If the message is a broadcast..
+					addXfer(ioMsg,broadcastIn);							// Setup a brodcast transfer.
+					handled = true;											//
+				} else {															// Else it's peer to peer..
+					if (ioMsg->getPDUs()==ourNetObj->getAddr()) {	// If it's actually to us..
+						addXfer(ioMsg,peerToPeerIn);						// Setup a brodcast transfer.
+						handled = true;										//
+					}																//
+				}																	//
+			}																		//
+		} else {																	// Else we wrote it!
+			if (ioMsg->getNumBytes()>8) {									// If message is oversized..
+				if (ioMsg->getPDUs()==GLOBAL_ADDR) {					// If the message is a broadcast..
+					addXfer(ioMsg,broadcastOut);							// Setup a brodcast transfer.
+				} else {															// Else it's NOT a broadcast..
+					addXfer(ioMsg,peerToPeerOut);							// Set up a peer to peer transfer.
+				}																	//
+				handled = true;												// In any case, it's been handled.
+			}																		//
+		}																			//
+		if (!handled) {														// If the message has NOT been handled..
+			trace = (xferNode*)getFirst();								// Grab first handler node from the list.
+			while(trace && !handled) {										// While we have non NULL node AND message has not been handled..
+				handled = trace->handleMsg(ioMsg,received);			// Ask each node if they want/need to handle this message.
+				trace = (xferNode*)trace->getNext();					// Then jump to the next node regardless of the answer.
+			}																		// That's it. either the message was handled or not.
+		}																			// 
+	}																				//
+	return handled;															// Return the final result.
+}
 
 
 // Basic garbage collection. Any transfer message nodes completed get marked as complete
@@ -734,6 +873,7 @@ void  xferList::idle(void) {
 }
 
 
+
 // ***************************************************************************************
 //				              ----- mesgQ. Hold 'em in here. -----
 // ***************************************************************************************
@@ -753,12 +893,14 @@ msgQ::msgQ(void) {  }
 msgQ::~msgQ(void) {  }
 
 
+
 // ***************************************************************************************
 //		----- netObj. Base class for allowing navigation of SAE J1939 networks -----
 // ***************************************************************************************
+
 						
 netObj::netObj(void)
-	: linkList(), idler() {
+	: linkList(), idler(), netName() {
 	
 	ourState	= config;		// We arrive in config mode.
 	addr		= NULL_ADDR;	// No address.
@@ -772,6 +914,7 @@ netObj::~netObj(void) {  }
 // Things we can do to set up shop once we are actually post globals and running in code.
 void netObj::begin(netName* inName,byte inAddr,addrCat inAddCat) {
 
+	ourXferList.begin(this);				// The xferList needs a pointer to us. Here 'tis.
 	copyName(inName);							// We get our name info and copy it to ourselves.
 	setAddr(inAddr);							// Our initial address.
 	setAddrCat(inAddCat);					// Our method of handling address issues.
@@ -793,11 +936,11 @@ void netObj::incomingMsg(message* inMsg) {
 
 	msgObj*	newMsg;
 	
-	if (inMsg) {											// First sanity. Did they slip us a NULL?
-		if (!ourXferList->handledMsg(inMsg)) {		// Not NULL. If the xfer list doesn't want it..
-			newMsg = new msgObj(inMsg);				// Make up a msgObj and stuff it in there.
-			if (newMsg) {									// Got one?
-				ourMsgQ.push(newMsg);					// Stuff it into the queue.
+	if (inMsg) {												// First sanity. Did they slip us a NULL?
+		if (!ourXferList.handledMsg(inMsg,true)) {	// Not NULL. Ok, if the xfer list doesn't want it..
+			newMsg = new msgObj(inMsg);					// Make up a msgObj and stuff it in there.
+			if (newMsg) {										// Got one?
+				ourMsgQ.push(newMsg);						// Stuff it into the queue.
 			}
 		}
 	}
@@ -807,9 +950,9 @@ void netObj::incomingMsg(message* inMsg) {
 // When we want a message sent out, pass it in here. -(Can have > 8 data bytes)-
 void netObj::outgoingingMsg(message* outMsg) {
 
-	if (inMsg) {											// First sanity. Always check for NULL.
-		if (outMsg->getnumBytes()>8) {				// Ok, If we have more than 8 databytes..
-			ourXferList->addXfer(outMsg,false);		// Pass the message over to the xfer list.
+	if (outMsg) {											// First sanity. Always check for NULL.
+		if (outMsg->getNumBytes()>8) {				// Ok, If we have more than 8 databytes..
+			ourXferList.handledMsg(outMsg,false);	// Pass the message over to the xfer list.
 		} else {												// Else, we are within 8 data bytes limit..
 			sendMsg(outMsg);								// Shove the message out the wire.
 		}
