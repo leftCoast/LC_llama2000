@@ -2,6 +2,51 @@
 
 
 
+// The byte order is not the same as Arduino. It could be different than whatever YOU are
+// trying to use the for. So we have these two integer byte ordering routines to make life
+// easier. Whatever byte you want as high byte, stuff in the highByte slot, low byte into
+// lowByte slot etc.
+
+
+uint16_t pack16(byte hiByte,byte lowByte) {
+  
+   struct int16 {
+      byte lowByte;
+      byte hiByte;
+   };
+   int16*	bytes;
+   uint16_t	value;
+
+   value = 0;                    // Shut up compiler.
+   bytes = (int16*)&value;
+   bytes->lowByte = lowByte;
+   bytes->hiByte = hiByte;
+   return(value);
+}
+
+
+uint32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
+  
+   struct int32 {
+      byte byte0;
+      byte byte1;
+      byte byte2;
+      byte byte3;
+   };
+   int32*   bytes;
+   uint32_t value;
+
+   value = 0;                    // Shut up compiler.
+   bytes = (int32*)&value;
+   bytes->byte3 = hiByte;
+   bytes->byte2 = byte2;
+   bytes->byte1 = byte1;
+   bytes->byte0 = lowByte;
+   return(value);
+}
+
+
+
 // ***************************************************************************************
 //				----- message class -----
 // ***************************************************************************************
@@ -199,79 +244,7 @@ void message::showMessage(void) {
 	*/
 }
 
-/*
-// ***************************************************************************************
-//				          -----            BAMmsg            -----
-// ***************************************************************************************
 
-// [32] [Size LSB] [Size MSB] [numPacks] [0xFF] [PGN LSB] [PGN2] [PGN MSB]
-
-// I hope I did this right.
-
-
-BAMmsg::BAMmsg(void) {  }
-
-BAMmsg::BAMmsg(message* inBAMMsg) {  
-
-	if (getPDUf()==BAM_PF && getNumBytes()==8) {
-		setCANID(inBAMMsg->getCANID());
-		for(int i=0;i<8;i++) {
-			msgData[i] = inBAMMsg->getDataByte(i);
-		}
-	}	
-}
-
-
-BAMmsg::~BAMmsg(void){  }
-	
-	
-void BAMmsg::setupBAM(byte destAddr,int numBytes,byte numPacks,uint32_t PGN) {
-	
-	setPGN(BAM_COMMAND);
-	setPDUs(destAddr);
-	msgData[0] = 32;						// As per doc.
-	msgData[1] = numBytes & 0xFF;		// Byte one LSB
-	numBytes = numBytes >> 8;			// Scroll off the LSB.
-	msgData[2] = numBytes & 0xFF;		// Leaving MSB for byte 2.
-	msgData[3] = numPacks;				// Byte 3 is just a byte.
-	msgData[4] = 0xFF;					// As per doc.
-	msgData[5] = PGN & 0xFF;			// Byte 5, LSB
-	PGN = PGN >> 8;						// Clock it over.
-	msgData[6] = PGN & 0xFF;			// Byte 6, Medium SB?
-	PGN = PGN >> 8;						// Clock it over.
-	msgData[7] = PGN & 0xFF;			// Byte 7, MSB. And we're done?
-}
-
-
-int BAMmsg::getBAMNumBytes(void) {
-
-	int	numBytes;
-	
-	numBytes = 0;
-	numBytes = numBytes |  msgData[2];
-	numBytes = numBytes << 8;
-	numBytes = numBytes |  msgData[1];
-	return numBytes;
-}
-
-
-byte BAMmsg::getBAMNumPacks(void) { return msgData[3]; }
-
-
-uint32_t BAMmsg::getBAMPGN(void) {
-
-	uint32_t PGN;
-    
-	PGN = 0;
-	PGN = PGN | msgData[7];
-	PGN = PGN << 8;
-	PGN = PGN | msgData[6];
-	PGN = PGN << 8;
-	PGN = PGN | msgData[5];
-	return PGN;
-}
-
-*/
 
 // ***************************************************************************************
 //                       -----------  netName class  -----------
@@ -647,34 +620,45 @@ void addrList::showList(bool withNames) {
 
 // Setting up the base goodies. A copy of the initial message. Setting the complete
 // variable..
-xferNode::xferNode(message* inMsg)
+xferNode::xferNode(message* inMsg,netObj* inNetObj)
 	: linkListObj() {
 	
-	msg = new message(inMsg);
-	if (msg) {
-		complete = false;
-	} else {
-		complete = true;
-	}
+	complete = true;					// Default to an error. Delete me!
+	msg = new message(inMsg);		// Create our copy of the initial message.
+	if (msg && inNetObj) {			// If we got the message copied. And non NULL netObj..
+		complete = false;				// Clear the kill order.
+		ourNetObj = inNetObj;		// Save off our netObj pointer.
+	}										//
 }
 	
 
-// Here is where we delete the initial message. Just so you know.	
+// Here is where we delete our copy of the initial message. Just so you know.	
 xferNode::~xferNode(void) { if (msg) delete(msg); } // Recycle the initial message.
+
+
+void xferNode::addMsgToQ(void) {
+
+	msgObj*	newMsg;
+	
+	newMsg = new msgObj(msg);					// Make up a msgObj and stuff it in there.
+	if (newMsg) {									// Got one?
+		ourNetObj->ourMsgQ.push(newMsg);		// Stuff it into the queue.
+	}
+}
 
 
 
 //				          -----    outgoingBroadcast    -----
 
 
-outgoingBroadcast::outgoingBroadcast(message* inMsg)
-	: xferNode(inMsg) {  }
+outgoingBroadcast::outgoingBroadcast(message* inMsg,netObj* inNetObj)
+	: xferNode(inMsg,inNetObj) {  }
 	
 	
 outgoingBroadcast::~outgoingBroadcast(void) {  }
 	
 
-bool outgoingBroadcast::handleMsg(message* inMsg,bool received) {
+bool outgoingBroadcast::handleMsg(message* inMsg) {
 	
 	return false;
 }
@@ -690,14 +674,14 @@ void outgoingBroadcast::idleTime(void) {
 //				          -----    outgoingPeerToPeer    -----
 
 
-outgoingPeerToPeer::outgoingPeerToPeer(message* inMsg)
-	: xferNode(inMsg) {  }
+outgoingPeerToPeer::outgoingPeerToPeer(message* inMsg,netObj* inNetObj)
+	: xferNode(inMsg,inNetObj) {  }
 	
 	
 outgoingPeerToPeer::~outgoingPeerToPeer(void) {  }
 
 	
-bool outgoingPeerToPeer::handleMsg(message* inMsg,bool received) {
+bool outgoingPeerToPeer::handleMsg(message* inMsg) {
 
 	return false;
 }
@@ -712,21 +696,70 @@ void outgoingPeerToPeer::idleTime(void) {
 //				          -----    incomingBroadcast    -----
 
 
-incomingBroadcast::incomingBroadcast(message* inMsg)
-	: xferNode(inMsg) {  }
+incomingBroadcast::incomingBroadcast(message* inMsg,netObj* inNetObj)
+	: xferNode(inMsg,inNetObj) {
+	
+	if (msg) {																			// If we got the initial message..
+		msgSize	= pack16(msg->getDataByte(2),msg->getDataByte(1));		// Copy out the message size.
+		msgPacks	= msg->getDataByte(3);											// Grab the number of packets.
+		msgPGN	= pack16(msg->getDataByte(7),msg->getDataByte(6));		// Grab the top two bytes..
+		msgPGN 	= msgPGN << 8;														// Shift 'em up by a byte.
+		msgPGN 	= msgPGN & 0x00ffff00;											// Zero out everything else int our PGN.
+		msgPGN 	= msgPGN | msg->getDataByte(5);								// Stuff in the least significant byte.
+		msgAddr	= NULL_ADDR;														// Group broadcasts have no source address.
+		delete(msg);																	// Done with incoming message. recycle it.
+		msg = new message(msgSize);												// Have a shot at creating the new larger message.
+		if (msg) {																		// If we were able to allocate the new message..
+			msg->setPGN(msgPGN);														// We set it's PGN.
+			msgPackNum = 1;															// Set the packet number.
+			byteTotal = 0;																// We ain't transferred any yet.
+			xFerTimout.setTime(750);												// We start the timeout timer.
+		} else {																			// Else? We couldn't get the RAM?
+			complete = true;															// Call for our recycling, we're done.
+		}
+	}																						//
+}
 	
 	
 incomingBroadcast::~incomingBroadcast(void) { }
 	
 
-bool incomingBroadcast::handleMsg(message* inMsg,bool received) {
+bool incomingBroadcast::handleMsg(message* inMsg) {
 
-	return false;
+	int	i;
+	
+	if (inMsg && !complete) {															// Sanity! Non NULL message and NOT complete?
+		if (inMsg->getPDUf()==DATA_XFER_PF) {										// If it's a data packet..
+			if (inMsg->getPDUs()==GLOBAL_ADDR) {									// If it's a GLOBAL data packet..
+				if (inMsg->getNumBytes()==8) {										// AND if it has exactly 8 bytes data..
+					if (inMsg->getDataByte(0)==msgPackNum) {						// Ok. If this matches our desired packet num..
+						i = 1;																// Fine! We'll take it. Set up a counter.
+						while(byteTotal<msgSize&&i<8) {								// While we have data to transfer and a place to store it.
+							msg->setDataByte(byteTotal,inMsg->getDataByte(i));	// We transfer bytes.
+							byteTotal++;													// Bump up the total transferred.
+							i++;																// Bump local count.
+						}																		// 
+						msgPackNum++;														// Bump up our packet ID num.
+						xFerTimout.start();												// Restart the timeout timer.
+						if (byteTotal==msgSize) {										// If we got ALL the bytes?
+							addMsgToQ();													// All done, add what we built to the queue.
+							complete = true;												// Call for our recycling, we're done!
+						}																		//
+						return true;														// Hey, we we handled that one!
+					}																			//
+				}																				//
+			}																					//
+		}																						//
+	}																							//
+	return false;																			// Wasn't what we were looking for, not handled.
 }	
 
 
 void incomingBroadcast::idleTime(void) {
 
+	if (xFerTimout.ding()) {	// If our timeout timer expires?
+		complete = true;			// Call for our recycling, we're done!
+	}
 }
 
 
@@ -734,15 +767,16 @@ void incomingBroadcast::idleTime(void) {
 //				         -----    incomingPeerToPeer    -----
 
 
-incomingPeerToPeer::incomingPeerToPeer(message* inMsg)
-	: xferNode(inMsg) {  }
+incomingPeerToPeer::incomingPeerToPeer(message* inMsg,netObj* inNetObj)
+	: xferNode(inMsg,inNetObj) { }
 	
 	
 incomingPeerToPeer::~incomingPeerToPeer(void) { }
 
 	
-bool incomingPeerToPeer::handleMsg(message* inMsg,bool received) {
+bool incomingPeerToPeer::handleMsg(message* inMsg) {
 
+	
 	return false;
 }
 
@@ -776,16 +810,16 @@ void xferList::addXfer(message* ioMsg,xferTypes xferType) {
 	newXferNode = NULL;
 	switch(xferType) {
 		case broadcastIn		:	// We received a "BAM message".
-			newXferNode = (xferNode*) new incomingBroadcast(ioMsg);
+			newXferNode = (xferNode*) new incomingBroadcast(ioMsg,ourNetObj);
 		break;
 		case broadcastOut		:	// We created a "BAM message".
-			newXferNode = (xferNode*) new outgoingBroadcast(ioMsg);
+			newXferNode = (xferNode*) new outgoingBroadcast(ioMsg,ourNetObj);
 		break;
 		case peerToPeerIn		:	// We received a "request to send" from a peer.
-			newXferNode = (xferNode*) new incomingPeerToPeer(ioMsg);
+			newXferNode = (xferNode*) new incomingPeerToPeer(ioMsg,ourNetObj);
 		break;
 		case peerToPeerOut	:	// We created a "request to send" for a peer.
-			newXferNode = (xferNode*) new outgoingPeerToPeer(ioMsg);
+			newXferNode = (xferNode*) new outgoingPeerToPeer(ioMsg,ourNetObj);
 		break;
 	}
 	if (newXferNode) {
@@ -830,7 +864,7 @@ bool  xferList::handledMsg(message* ioMsg,bool received) {
 		if (!handled) {														// If the message has NOT been handled..
 			trace = (xferNode*)getFirst();								// Grab first handler node from the list.
 			while(trace && !handled) {										// While we have non NULL node AND message has not been handled..
-				handled = trace->handleMsg(ioMsg,received);			// Ask each node if they want/need to handle this message.
+				handled = trace->handleMsg(ioMsg);						// Ask each node if they want/need to handle this message.
 				trace = (xferNode*)trace->getNext();					// Then jump to the next node regardless of the answer.
 			}																		// That's it. either the message was handled or not.
 		}																			// 

@@ -48,15 +48,18 @@
 // heavy hitters are set out here for use in the code.
 
 
-#define GLOBAL_ADDR		255		// Destination only address. "Hey everyone!"
 #define NULL_ADDR			254		// Source address only. "Hey, I have no address."
+#define GLOBAL_ADDR		255		// Destination only address. "Hey everyone!"
+
 #define REQ_MESSAGE		59904		// Request PGN. "Hey EVERYONE send out your name and address."
+#define DATA_XFER			60160		// Multi packet chunk of data.
+#define BAM_COMMAND		60416		// Big load coming! Make room!
 #define ADDR_CLAIMED		60928		// Claimed PGN. "Hey EVERYONE this is my name and address." Or can't claim one.
 #define COMMAND_ADDR		65240		// We were told to use this address.
-#define BAM_COMMAND		60416		// Big load coming! Make room!
 
 #define REQ_ADDR_CLAIM_PF	234	// 0xEA, PS = Destination addr.
-#define BAM_PF					236	// PS = 255 or Destination addr.
+#define DATA_XFER_PF			235	// 0xEB, PS = 255 or Destination addr.
+#define BAM_PF					236	// 0xEC, PS = 255 or Destination addr.
 #define ADDR_CLAIMED_PF		238	// 0xEE, PS = 255. Works for both (ACK) & (NACK)
 #define COMMAND_ADDR_PF		254	// PS = 216. Giving PGN of COMMAND_ADDR above.
 
@@ -66,9 +69,12 @@
 #define DEF_R				false		// R (reserved bit) All the doc.s say to leave it as 0.
 #define DEF_DP				false		// DP (Data page) All doc.s say to leave it  as 0. But nearly ALL NMEA 2000 sets it as high order PGN bit (1).
 
+
 class netName;							// Forward class thing. Don't worry about it.
 class msgHandler;						// And another one. Just look the other way. Maybe hum a little.
 class netObj;							// These things seem to breed..
+
+
 
 // Typically unused data bytes are set to 0xFF. These can be used as quick and easy way to
 // test if a field read in from a message, is all set to ones IE : unused.
@@ -76,6 +82,17 @@ class netObj;							// These things seem to breed..
 bool	isBlank(uint8_t inVal);
 bool	isBlank(uint16_t inVal);
 bool	isBlank(uint32_t inVal);
+
+
+
+// The byte order is not the same as Arduino. It could be different than whatever YOU are
+// trying to use the for. So we have these two integer byte ordering routines to make life
+// easier. Whatever byte you want as high byte, stuff in the highByte slot, low byte into
+// lowByte slot etc.
+
+
+uint16_t pack16(byte hiByte,byte lowByte);
+uint32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte);
 
 
 
@@ -127,29 +144,6 @@ class message {
 };
 
 
-/*
-// ***************************************************************************************
-//				          -----            BAMmsg            -----
-// ***************************************************************************************
-
-// I may delet this bit.
-//
-// [32] [Size LSB] [Size MSB] [numPacks] [0xFF] [PGN LSB] [PGN2] [PGN MSB]
-// NOT FINISHED YET
-
-class BAMmsg :	public message {
-
-	public:
-				BAMmsg(void);
-				BAMmsg(message* inBAMMsg);
-	virtual	~BAMmsg(void);
-	
-				void		setupBAM(byte destAddr,int numBytes,byte numPacks,uint32_t PGN);
-				int		getBAMNumBytes(void);
-				byte		getBAMNumPacks(void);
-				uint32_t	getBAMPGN(void);
-};
-*/
 
 // ***************************************************************************************
 //				                   ----- netName -----
@@ -434,6 +428,7 @@ public:
 //				-----    xferList   &  xferNode    -----
 // ***************************************************************************************
 
+// [32] [Size LSB] [Size MSB] [numPacks] [0xFF] [PGN LSB] [PGN2] [PGN MSB]
 
 // This is work in progress. When needed to send more than eight bytes one needs to do a
 // multi message transmission. This list is to track what multi part messages that are
@@ -455,13 +450,16 @@ enum xferTypes {
 class xferNode :	public linkListObj {
 
 	public:
-				xferNode(message* inMsg);
+				xferNode(message* inMsg,netObj* inNetObj);
 	virtual	~xferNode(void);
 	
 	virtual	void	idleTime(void)=0;
-	virtual	bool	handleMsg(message* inMsg,bool received)=0;
+	virtual	bool	handleMsg(message* inMsg)=0;
+				void	addMsgToQ(void);
 	
+				netObj*		ourNetObj;
 				message*		msg;
+				netObj*		inNetObj;
 				bool			complete;
 };
 
@@ -469,10 +467,10 @@ class xferNode :	public linkListObj {
 class outgoingBroadcast :	public xferNode {
 
 	public:
-				outgoingBroadcast(message* inMsg);
+				outgoingBroadcast(message* inMsg,netObj* inNetObj);
 	virtual	~outgoingBroadcast(void);
 	
-	virtual	bool	handleMsg(message* inMsg,bool received);
+	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
 
 };
@@ -481,10 +479,10 @@ class outgoingBroadcast :	public xferNode {
 class outgoingPeerToPeer :	public xferNode {
 
 	public:
-				outgoingPeerToPeer(message* inMsg);
+				outgoingPeerToPeer(message* inMsg,netObj* inNetObj);
 	virtual	~outgoingPeerToPeer(void);
 	
-	virtual	bool	handleMsg(message* inMsg,bool received);
+	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
 
 };
@@ -493,22 +491,29 @@ class outgoingPeerToPeer :	public xferNode {
 class incomingBroadcast :	public xferNode {
 
 	public:
-				incomingBroadcast(message* inMsg);
+				incomingBroadcast(message* inMsg,netObj* inNetObj);
 	virtual	~incomingBroadcast(void);
 	
-	virtual	bool	handleMsg(message* inMsg,bool received);
+	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
-
+	
+				timeObj	xFerTimout;
+				uint16_t	msgSize;
+				uint16_t	byteTotal;
+				uint8_t	msgPacks;
+				uint8_t	msgPackNum;
+				uint32_t	msgPGN;
+				uint8_t	msgAddr;
 };
 
 
 class incomingPeerToPeer :	public xferNode {
 
 	public:
-				incomingPeerToPeer(message* inMsg);
+				incomingPeerToPeer(message* inMsg,netObj* inNetObj);
 	virtual	~incomingPeerToPeer(void);
 	
-	virtual	bool	handleMsg(message* inMsg,bool received);
+	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
 
 };
@@ -523,7 +528,7 @@ public:
 	
 				void	begin(netObj* inNetObj);
 	virtual	void	addXfer(message* ioMsg,xferTypes xferType);
-				bool	handledMsg(message* ioMsg,bool receive);
+				bool	handledMsg(message* ioMsg,bool received);
 				void	listCleanup(void);
 	virtual	void  idle(void);
 	

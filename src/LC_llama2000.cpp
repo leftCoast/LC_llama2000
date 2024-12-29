@@ -2,44 +2,6 @@
 #include <resizeBuff.h>
 
 
-
-int pack16(byte hiByte,int lowByte) {
-  
-   struct int16 {
-      byte lowByte;
-      byte hiByte;
-   };
-   int16*   bytes;
-   int      value;
-
-   value = 0;                    // Shut up compiler.
-   bytes = (int16*)&value;
-   bytes->lowByte = lowByte;
-   bytes->hiByte = hiByte;
-   return(value);
-}
-
-uint32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
-  
-   struct int32 {
-      byte byte0;
-      byte byte1;
-      byte byte2;
-      byte byte3;
-   };
-   int32*   bytes;
-   uint32_t value;
-
-   value = 0;                    // Shut up compiler.
-   bytes = (int32*)&value;
-   bytes->byte3 = hiByte;
-   bytes->byte2 = byte2;
-   bytes->byte1 = byte1;
-   bytes->byte0 = lowByte;
-   return(value);
-}
-
-
 // ************ llama_NMEA2000 ************
 
 
