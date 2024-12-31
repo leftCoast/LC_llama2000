@@ -60,6 +60,7 @@
 #define REQ_ADDR_CLAIM_PF	234	// 0xEA, PS = Destination addr.
 #define DATA_XFER_PF			235	// 0xEB, PS = 255 or Destination addr.
 #define BAM_PF					236	// 0xEC, PS = 255 or Destination addr.
+#define SEND_REQ				236	// 0xEC, PS = Destination addr.
 #define ADDR_CLAIMED_PF		238	// 0xEE, PS = 255. Works for both (ACK) & (NACK)
 #define COMMAND_ADDR_PF		254	// PS = 216. Giving PGN of COMMAND_ADDR above.
 
@@ -96,6 +97,13 @@ uint32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte);
 
 
 
+// There are cases where a PGN is saved as three bytes. If you know the order of the
+// bytes, and you should, this'll assemble the PGN for you.
+
+uint32_t threeBytePGN(uint8_t hiByte,uint8_t midByte,uint8_t lowByte);
+
+
+
 // ***************************************************************************************
 //				----- message -----
 // ***************************************************************************************
@@ -129,6 +137,7 @@ class message {
 				byte		getSourceAddr(void);
 				void		setDataByte(int index,byte inByte);
 				byte		getDataByte(int index);
+				byte*		passData(void);
 				void		showMessage(void);
 				bool		msgIsLessThanName(netName* inName);
 				
@@ -450,17 +459,23 @@ enum xferTypes {
 class xferNode :	public linkListObj {
 
 	public:
-				xferNode(message* inMsg,netObj* inNetObj);
+				xferNode(netObj* inNetObj);
 	virtual	~xferNode(void);
 	
 	virtual	void	idleTime(void)=0;
 	virtual	bool	handleMsg(message* inMsg)=0;
+				void	startTimer(int lowMs,int hiMs);
 				void	addMsgToQ(void);
 	
-				netObj*		ourNetObj;
-				message*		msg;
-				netObj*		inNetObj;
-				bool			complete;
+				bool		complete;
+				netObj*	ourNetObj;
+				timeObj	xFerTimer;
+				byte*		outData;
+				message	msg;
+				uint16_t	msgSize;
+				uint16_t	byteTotal;
+				uint8_t	msgPacks;
+				uint8_t	packNum;			
 };
 
 
@@ -496,14 +511,6 @@ class incomingBroadcast :	public xferNode {
 	
 	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
-	
-				timeObj	xFerTimout;
-				uint16_t	msgSize;
-				uint16_t	byteTotal;
-				uint8_t	msgPacks;
-				uint8_t	msgPackNum;
-				uint32_t	msgPGN;
-				uint8_t	msgAddr;
 };
 
 

@@ -46,6 +46,22 @@ uint32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
 }
 
 
+// There are cases where a PGN is saved as three bytes. If you know the order of the
+// bytes, and you should, this'll assemble the PGN for you.
+uint32_t threeBytePGN(uint8_t hiByte,uint8_t midByte,uint8_t lowByte) {
+
+	uint32_t	aPGN;
+	
+	aPGN = 0;
+	aPGN = aPGN | hiByte;
+	aPGN = aPGN << 8;
+	aPGN = aPGN | midByte;
+	aPGN = aPGN << 8;
+	aPGN = aPGN | lowByte;
+	return aPGN;
+}
+
+
 
 // ***************************************************************************************
 //				----- message class -----
@@ -203,6 +219,22 @@ void message::setDataByte(int index,byte inByte) { msgData[index] = inByte; }
 
 
 byte message::getDataByte(int index) { return msgData[index]; }
+
+
+// Ok, this one passes the pointer to our data buffer to someone else to own. We give up
+// ownership to it completely. This is used for multi packet transfers. We are basically
+// pulled apart and our data is used to form a multi packet dats stream for trasmission.
+// Really, it doesn't hurt, much.
+byte* message::passData(void) {
+
+	byte*	dataPtr;
+	
+	dataPtr = msgData;	// Grab the data's address.
+	msgData = NULL;		// NULL out our pointer to it.
+	numBytes = 0;			// zero out our amount of data.
+	return dataPtr;		// Pass the buffer on to whomever is to take it.
+}
+
 
 
 // This takes our data bytes, MUST be eight in this case. Converts it to a netName and
@@ -620,27 +652,41 @@ void addrList::showList(bool withNames) {
 
 // Setting up the base goodies. A copy of the initial message. Setting the complete
 // variable..
-xferNode::xferNode(message* inMsg,netObj* inNetObj)
+xferNode::xferNode(netObj* inNetObj)
 	: linkListObj() {
 	
-	complete = true;					// Default to an error. Delete me!
-	msg = new message(inMsg);		// Create our copy of the initial message.
-	if (msg && inNetObj) {			// If we got the message copied. And non NULL netObj..
-		complete = false;				// Clear the kill order.
-		ourNetObj = inNetObj;		// Save off our netObj pointer.
-	}										//
+	complete		= true;		// Let the offspring set this.
+	ourNetObj	= inNetObj;	// Save off our netObj pointer.
+	outData		= NULL;
 }
 	
 
-// Here is where we delete our copy of the initial message. Just so you know.	
-xferNode::~xferNode(void) { if (msg) delete(msg); } // Recycle the initial message.
+// outData may have been used. If not NULL, we'll need to delete it.
+xferNode::~xferNode(void) {
+
+	if (outData) {			// If someone set it..
+		free(outData);		// We release it.
+		outData = NULL;	// Flag it so no one else tries to release it.
+	}
+}
 
 
+// Start the timer with a time in ms somewhere between these two values.
+void xferNode::startTimer(int lowMs,int hiMs) {
+	
+	long timeMs;
+	
+	timeMs = random(lowMs, hiMs+1);
+	xFerTimer.setTime(timeMs,true);
+}
+
+
+// Add msg to the list of incoming messages to be found by the handlers.
 void xferNode::addMsgToQ(void) {
 
 	msgObj*	newMsg;
 	
-	newMsg = new msgObj(msg);					// Make up a msgObj and stuff it in there.
+	newMsg = new msgObj(&msg);					// Make up a msgObj.
 	if (newMsg) {									// Got one?
 		ourNetObj->ourMsgQ.push(newMsg);		// Stuff it into the queue.
 	}
@@ -652,21 +698,94 @@ void xferNode::addMsgToQ(void) {
 
 
 outgoingBroadcast::outgoingBroadcast(message* inMsg,netObj* inNetObj)
-	: xferNode(inMsg,inNetObj) {  }
+	: xferNode(inNetObj) {
 	
+	uint8_t	aByte;
+	uint16_t	aWord;
+	uint32_t	aPGN;
 	
-outgoingBroadcast::~outgoingBroadcast(void) {  }
+	if (inMsg && inNetObj) {										// As always check sanity..
+		if (inMsg->getNumBytes()>8) {								// If its's too big..
+			if (inMsg->getPDUs()==GLOBAL_ADDR) {				// If it's to everyone..
+				msgSize = inMsg->getNumBytes();					// Save off the size.
+				byteTotal = 0;											// None been sent. yet..
+				outData = inMsg->passData();						// Hands over the actual data to us.
+				msgPacks = msgSize/7;								// Seven goes into num bytes.?.
+				if (msgSize%7) {										//	We got leftovers?
+					 msgPacks++;										// Then add one.
+				}															// 
+				packNum = 1;											// The packet ID we'll be sending.
+				msg.setNumBytes(8);									// Ok we make up a BAM message..
+				msg.setPriority(7);									// Set up the standard bits..
+				msg.setR(0);											//
+				msg.setDP(0);											//
+				msg.setPDUf(BAM_PF);									// Yes, a BAM message.
+				msg.setPDUs(GLOBAL_ADDR);							// We are broadcasting.
+				msg.setSourceAddr(ourNetObj->getAddr());		// From us.
+				msg.setDataByte(0,32);								// Data section, first is a constant.
+				aWord = msgSize;										// Next two are the number of bytes to come.
+				aByte = aWord & 0x00FF;								//
+				msg.setDataByte(1,aByte);							//
+				aWord = aWord >> 8;									//
+				aByte = aWord & 0x00FF;								//
+				msg.setDataByte(2,aByte);							// 
+				msg.setDataByte(3,msgPacks);						// Set in num message packets.
+				msg.setDataByte(4,0xFF);							// Some reserve thing.
+				aPGN = inMsg->getPGN();								// The PGN in question.
+				aByte = aPGN & 0x000000FF;							//
+				msg.setDataByte(5,aByte);							//
+				aPGN = aPGN >> 8;										//
+				aByte = aPGN & 0x000000FF;							//
+				msg.setDataByte(6,aByte);							//
+				aPGN = aPGN >> 8;										//
+				aByte = aPGN & 0x000000FF;							//
+				msg.setDataByte(7,aByte);							//
+				ourNetObj->sendMsg(&msg);							// And its on it's way!
+				startTimer(50,200);									// We don't send another 'till the timer dings.
+				complete = false;
+			}
+		}
+	}			
+}
+
+	
+// If we grabbed the data buffer? We'll deal with it here..	
+outgoingBroadcast::~outgoingBroadcast(void) {
+
+	if (outData) {			// If outData is non NULL. (We used it.)
+		free(outData);		// Recycle the RAM.
+		outData = NULL;	// Flag it as recycled so no one else tries to free it.
+	}
+}
 	
 
-bool outgoingBroadcast::handleMsg(message* inMsg) {
-	
-	return false;
-}
+// When broadcasting we don't listen. At all..
+bool outgoingBroadcast::handleMsg(message* inMsg) { return false; }
 
 		
 void outgoingBroadcast::idleTime(void) {
 	
-	
+	if (!complete) {													// If we're currently running..
+		if (xFerTimer.ding()) {										// If our timer has expired..
+			msg.setPriority(7);										// Set up the standard bits..
+			msg.setR(0);												//
+			msg.setDP(0);												//
+			msg.setPDUf(DATA_XFER_PF);								// Data xFer message.
+			msg.setPDUs(GLOBAL_ADDR);								// We are broadcasting.
+			msg.setSourceAddr(ourNetObj->getAddr());			// From us.
+			msg.setDataByte(0,packNum++);							// Data packet ID.
+			for(int i=1;i<8;i++) {									// For each byte..
+				if (byteTotal>msgSize) {							// If we've run out of data..
+					msg.setDataByte(0,0xFF);						// Data byte is flagged as 255.
+					complete = true;									// After this function? We're done.
+				} else {													// Else, we have data to send.
+					msg.setDataByte(0,outData[byteTotal++]);	// Write the data byte.
+				}															//
+			}																//
+			ourNetObj->sendMsg(&msg);								// And its on it's way!
+			startTimer(50,200);										// We don't send another 'till the timer dings.
+		}
+	}
 }
 
 
@@ -675,7 +794,7 @@ void outgoingBroadcast::idleTime(void) {
 
 
 outgoingPeerToPeer::outgoingPeerToPeer(message* inMsg,netObj* inNetObj)
-	: xferNode(inMsg,inNetObj) {  }
+	: xferNode(inNetObj) {  }
 	
 	
 outgoingPeerToPeer::~outgoingPeerToPeer(void) {  }
@@ -697,28 +816,25 @@ void outgoingPeerToPeer::idleTime(void) {
 
 
 incomingBroadcast::incomingBroadcast(message* inMsg,netObj* inNetObj)
-	: xferNode(inMsg,inNetObj) {
-	
-	if (msg) {																			// If we got the initial message..
-		msgSize	= pack16(msg->getDataByte(2),msg->getDataByte(1));		// Copy out the message size.
-		msgPacks	= msg->getDataByte(3);											// Grab the number of packets.
-		msgPGN	= pack16(msg->getDataByte(7),msg->getDataByte(6));		// Grab the top two bytes..
-		msgPGN 	= msgPGN << 8;														// Shift 'em up by a byte.
-		msgPGN 	= msgPGN & 0x00ffff00;											// Zero out everything else int our PGN.
-		msgPGN 	= msgPGN | msg->getDataByte(5);								// Stuff in the least significant byte.
-		msgAddr	= NULL_ADDR;														// Group broadcasts have no source address.
-		delete(msg);																	// Done with incoming message. recycle it.
-		msg = new message(msgSize);												// Have a shot at creating the new larger message.
-		if (msg) {																		// If we were able to allocate the new message..
-			msg->setPGN(msgPGN);														// We set it's PGN.
-			msgPackNum = 1;															// Set the packet number.
-			byteTotal = 0;																// We ain't transferred any yet.
-			xFerTimout.setTime(750);												// We start the timeout timer.
-		} else {																			// Else? We couldn't get the RAM?
-			complete = true;															// Call for our recycling, we're done.
-		}
-	}																						//
-}
+	: xferNode(inNetObj) {
+
+	uint32_t	msgPGN;	
+		
+	msgSize	= pack16(inMsg->getDataByte(2),inMsg->getDataByte(1));	// Grab the number of bytes.
+	msg.setNumBytes(msgSize);														// Try to set the message buffer size..
+	if (msg.getNumBytes()==msgSize) {											// If we got the RAM..
+		byteTotal	= 0;																// The total read.
+		msgPacks		= inMsg->getDataByte(3);									// Grab the number of packets.
+		packNum		= 1;																// The pack number we'll be looking for.
+		msgPGN		= threeBytePGN(inMsg->getDataByte(7),inMsg->getDataByte(6),inMsg->getDataByte(5)); // Grab PGN
+		msg.setPGN(msgPGN);															// Use this on the message.
+		msg.setSourceAddr(inMsg->getSourceAddr());							// Grab source address.
+		msg.setPriority(inMsg->getPriority());									// We'll copy the incoming's priority.
+		xFerTimer.setTime(750);													// We start the timeout timer.
+		complete = false;																// Clear the complete flag, were running!
+	}
+}																					
+
 	
 	
 incomingBroadcast::~incomingBroadcast(void) { }
@@ -728,36 +844,38 @@ bool incomingBroadcast::handleMsg(message* inMsg) {
 
 	int	i;
 	
-	if (inMsg && !complete) {															// Sanity! Non NULL message and NOT complete?
-		if (inMsg->getPDUf()==DATA_XFER_PF) {										// If it's a data packet..
-			if (inMsg->getPDUs()==GLOBAL_ADDR) {									// If it's a GLOBAL data packet..
-				if (inMsg->getNumBytes()==8) {										// AND if it has exactly 8 bytes data..
-					if (inMsg->getDataByte(0)==msgPackNum) {						// Ok. If this matches our desired packet num..
-						i = 1;																// Fine! We'll take it. Set up a counter.
-						while(byteTotal<msgSize&&i<8) {								// While we have data to transfer and a place to store it.
-							msg->setDataByte(byteTotal,inMsg->getDataByte(i));	// We transfer bytes.
-							byteTotal++;													// Bump up the total transferred.
-							i++;																// Bump local count.
-						}																		// 
-						msgPackNum++;														// Bump up our packet ID num.
-						xFerTimout.start();												// Restart the timeout timer.
-						if (byteTotal==msgSize) {										// If we got ALL the bytes?
-							addMsgToQ();													// All done, add what we built to the queue.
-							complete = true;												// Call for our recycling, we're done!
-						}																		//
-						return true;														// Hey, we we handled that one!
-					}																			//
-				}																				//
-			}																					//
-		}																						//
-	}																							//
-	return false;																			// Wasn't what we were looking for, not handled.
+	if (inMsg && !complete) {																// Sanity! Non NULL message and NOT complete?
+		if (inMsg->getPDUf()==DATA_XFER_PF) {											// If it's a data packet..
+			if (inMsg->getPDUs()==GLOBAL_ADDR) {										// If it's a GLOBAL data packet..
+				if (inMsg->getSourceAddr()==msg.getSourceAddr()) {					// If it's from our guy's source address..	
+					if (inMsg->getNumBytes()==8) {										// AND if it has exactly 8 bytes data..
+						if (inMsg->getDataByte(0)==packNum) {							// Ok. If this matches our desired packet num..
+							i = 1;																// Fine! We'll take it. Set up a counter.
+							while(byteTotal<msgSize&&i<8) {								// While we have data to transfer and a place to store it.
+								msg.setDataByte(byteTotal,inMsg->getDataByte(i));	// We transfer bytes.
+								byteTotal++;													// Bump up the total transferred.
+								i++;																// Bump local count.
+							}																		// 
+							packNum++;															// Bump up our packet ID num.
+							xFerTimer.start();												// Restart the timeout timer.
+							if (byteTotal==msgSize) {										// If we got ALL the bytes?
+								addMsgToQ();													// All done, add what we built to the queue.
+								complete = true;												// Call for our recycling, we're done!
+							}																		//
+							return true;														// Hey, we we handled that one!
+						}																			//
+					}																				//
+				}																					//
+			}																						//
+		}																							//
+	}																								//
+	return false;																				// Wasn't what we were looking for, not handled.
 }	
 
 
 void incomingBroadcast::idleTime(void) {
 
-	if (xFerTimout.ding()) {	// If our timeout timer expires?
+	if (xFerTimer.ding()) {	// If our timeout timer expires?
 		complete = true;			// Call for our recycling, we're done!
 	}
 }
@@ -768,7 +886,10 @@ void incomingBroadcast::idleTime(void) {
 
 
 incomingPeerToPeer::incomingPeerToPeer(message* inMsg,netObj* inNetObj)
-	: xferNode(inMsg,inNetObj) { }
+	: xferNode(inNetObj) {
+	
+	
+}
 	
 	
 incomingPeerToPeer::~incomingPeerToPeer(void) { }
