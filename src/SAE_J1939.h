@@ -59,7 +59,7 @@
 
 #define REQ_ADDR_CLAIM_PF	234	// 0xEA, PS = Destination addr.
 #define DATA_XFER_PF			235	// 0xEB, PS = 255 or Destination addr.
-#define BAM_PF					236	// 0xEC, PS = 255 or Destination addr.
+#define FLOW_CON_PF			236	// 0xEC, PS = 255 or Destination addr.
 #define SEND_REQ				236	// 0xEC, PS = Destination addr.
 #define ADDR_CLAIMED_PF		238	// 0xEE, PS = 255. Works for both (ACK) & (NACK)
 #define COMMAND_ADDR_PF		254	// PS = 216. Giving PGN of COMMAND_ADDR above.
@@ -70,6 +70,16 @@
 #define DEF_R				false		// R (reserved bit) All the doc.s say to leave it as 0.
 #define DEF_DP				false		// DP (Data page) All doc.s say to leave it  as 0. But nearly ALL NMEA 2000 sets it as high order PGN bit (1).
 
+
+// These guys are times for holding, timeout etc. Used in the peer to peer muti-packet code. Right out of the book.
+#define TR_MS				200		// Response time.
+#define TH_MS				500		// Holding time.
+#define T1_MS				750		// The rest seem to be unspecified.
+#define T2_MS				1250		// I'm SURE they will all become clear later.
+#define T3_MS				1250		// 
+#define T4_MS				1050		// Yeah, right..
+#define TWMIN_MS			50			// After broadcasting you must wait a random amount before the next broadcast. This is MIN.
+#define TWMAX_MS			200		// This is MAX.
 
 class netName;							// Forward class thing. Don't worry about it.
 class msgHandler;						// And another one. Just look the other way. Maybe hum a little.
@@ -453,29 +463,69 @@ enum xferTypes {
 };
 
 
+// For peer to peer there are.. Protocols.
+enum msgOutStates {
+	BAMSent,
+	packetSent,
+	dataSent
+};
+		
+	
+	
+	
+// Different messages we send and need to respond to.
+enum flowContType {
+	reqToSend	= 16,		// For peer to peer.
+	clearToSend	= 17,
+	endOfMsg		= 19,
+	BAM			= 32,		// For broadcast.
+	abortMsg		= 255
+};
+
+
+// Why is this transmission failing?
+enum abortReason {
+	notAbort,
+	busyAbort,
+	resourceAbort,
+	timoutAbort
+};
+
+// Abort values : 4..250 Are reserved by SAE for unknown reasons.
+// And values : 251..255 by J1939/71 for other unknown reasons.
+// They seem kinda' greedy in grabbing most of the pie. I guess we
+// should feel thankful for getting 4 of the values. :) 
+				
+				
 // Pure virtual base class to a transfer node. Think of it kinda' like a process thread.
 // We'll spawn one when we need to do a multi transfer. Then delete it when the transfer
 // is complete.
 class xferNode :	public linkListObj {
 
-	public:
+	public:	
 				xferNode(netObj* inNetObj);
 	virtual	~xferNode(void);
 	
 	virtual	void	idleTime(void)=0;
-	virtual	bool	handleMsg(message* inMsg)=0;
+	virtual	bool	handleMsg(message* inMsg);
 				void	startTimer(int lowMs,int hiMs);
 				void	addMsgToQ(void);
-	
-				bool		complete;
-				netObj*	ourNetObj;
-				timeObj	xFerTimer;
-				byte*		outData;
-				message	msg;
-				uint16_t	msgSize;
-				uint16_t	byteTotal;
-				uint8_t	msgPacks;
-				uint8_t	packNum;			
+				void	sendflowControlMsg(uint32_t aPGN,flowContType msgType,abortReason reason=notAbort);
+				bool	sendDataMsg(void);
+				
+				bool			complete;
+				bool			success;
+				abortReason	reason;
+				netObj*		ourNetObj;
+				timeObj		xFerTimer;
+				byte*			outData;
+				message		msg;
+				uint8_t		outAddr;
+				uint16_t		msgSize;
+				uint16_t		byteTotal;
+				uint8_t		msgPacks;
+				uint8_t		packNum;
+						
 };
 
 
@@ -485,21 +535,26 @@ class outgoingBroadcast :	public xferNode {
 				outgoingBroadcast(message* inMsg,netObj* inNetObj);
 	virtual	~outgoingBroadcast(void);
 	
-	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
-
 };
 
 
 class outgoingPeerToPeer :	public xferNode {
-
+				
 	public:
+				// Why are we waiting again?
+				enum waitStates {
+					waitToSend,
+					waitForACK
+				};
+				
 				outgoingPeerToPeer(message* inMsg,netObj* inNetObj);
 	virtual	~outgoingPeerToPeer(void);
 	
 	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
-
+	
+				waitStates	ourState;
 };
 
 
