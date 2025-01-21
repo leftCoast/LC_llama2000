@@ -73,17 +73,19 @@
 
 // These guys are times for holding, timeout etc. Used in the peer to peer muti-packet code. Right out of the book.
 #define TR_MS				200		// Response time.
-#define TH_MS				500		// Holding time.
+#define TH_MS				550		// Holding time. (Sent every 500 ms. So we addd a bit to be nice.)
 #define T1_MS				750		// The rest seem to be unspecified.
 #define T2_MS				1250		// I'm SURE they will all become clear later.
 #define T3_MS				1250		// 
 #define T4_MS				1050		// Yeah, right..
 #define TWMIN_MS			50			// After broadcasting you must wait a random amount before the next broadcast. This is MIN.
 #define TWMAX_MS			200		// This is MAX.
+#define BCAST_T1_MS		750		// Incoming broadcast timeout.
 
 class netName;							// Forward class thing. Don't worry about it.
 class msgHandler;						// And another one. Just look the other way. Maybe hum a little.
 class netObj;							// These things seem to breed..
+
 
 
 
@@ -104,13 +106,6 @@ bool	isBlank(uint32_t inVal);
 
 uint16_t pack16(byte hiByte,byte lowByte);
 uint32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte);
-
-
-
-// There are cases where a PGN is saved as three bytes. If you know the order of the
-// bytes, and you should, this'll assemble the PGN for you.
-
-uint32_t threeBytePGN(uint8_t hiByte,uint8_t midByte,uint8_t lowByte);
 
 
 
@@ -471,8 +466,6 @@ enum msgOutStates {
 };
 		
 	
-	
-	
 // Different messages we send and need to respond to.
 enum flowContType {
 	reqToSend	= 16,		// For peer to peer.
@@ -485,10 +478,11 @@ enum flowContType {
 
 // Why is this transmission failing?
 enum abortReason {
-	notAbort,
+	notAbort,		// Not because of a received abort. Mostly unexpected msg.
 	busyAbort,
 	resourceAbort,
-	timoutAbort
+	timoutAbort,
+	noReason
 };
 
 // Abort values : 4..250 Are reserved by SAE for unknown reasons.
@@ -506,25 +500,26 @@ class xferNode :	public linkListObj {
 				xferNode(netObj* inNetObj);
 	virtual	~xferNode(void);
 	
-	virtual	void	idleTime(void)=0;
-	virtual	bool	handleMsg(message* inMsg);
-				void	startTimer(int lowMs,int hiMs);
-				void	addMsgToQ(void);
-				void	sendflowControlMsg(uint32_t aPGN,flowContType msgType,abortReason reason=notAbort);
-				bool	sendDataMsg(void);
+	virtual	void			idleTime(void)=0;
+				uint32_t		getPGNFromTPData(message* inMsg);
+				abortReason	valueToReason(byte value);
+	virtual	bool			handleMsg(message* inMsg);
+				void			startTimer(int lowMs,int hiMs);
+				void			addMsgToQ(message* msg);
+				void			sendflowControlMsg(uint32_t aPGN,flowContType msgType,abortReason reason=notAbort);
+				bool			sendDataMsg(void);
 				
-				bool			complete;
-				bool			success;
-				abortReason	reason;
-				netObj*		ourNetObj;
-				timeObj		xFerTimer;
-				byte*			outData;
-				message		msg;
-				uint8_t		outAddr;
-				uint16_t		msgSize;
-				uint16_t		byteTotal;
-				uint8_t		msgPacks;
-				uint8_t		packNum;
+				bool			complete;		// complete as true means we are done and ready to be recycled.
+				bool			success;			// success means that were able to assemble all the data without an error.
+				abortReason	reason;			// If we got an abort, this is the reason for it.
+				netObj*		ourNetObj;		// Pointer back to the big boss. For addresses and sending stuff.
+				timeObj		xFerTimer;		// For holding before sending and timeouts for receiving.
+				byte*			outData;			// Used for holding the outgoing data. For those that send stuff.
+				uint8_t		outAddr;			// The address we send everything to.
+				uint16_t		msgSize;			// The total number of bytes for this message data block.
+				uint16_t		byteTotal;		// How many bytes we've sent/received of this message data block
+				uint8_t		msgPacks;		// How many packets we will be sending or expecting.
+				uint8_t		packNum;			// Numbering from 1, what packet are we sending or expecting.
 						
 };
 
@@ -566,6 +561,8 @@ class incomingBroadcast :	public xferNode {
 	
 	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
+	
+				message	msg;
 };
 
 
@@ -577,7 +574,8 @@ class incomingPeerToPeer :	public xferNode {
 	
 	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
-
+				
+				message	msg;
 };
 
 
