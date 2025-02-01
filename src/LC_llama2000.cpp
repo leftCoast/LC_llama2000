@@ -21,14 +21,14 @@ bool llama2000::begin(int inCSPin) {
 	netName	aName;
 	
 	aName.setID(6387);										// Device ID. We make these up. You get 21 bits. (2097151 or less)
-	aName.setManufCode(0);									// This would be assigned to you by NMEA people.
+	aName.setManufCode(73);									// This would be assigned to you by NMEA people.
 	aName.setECUInst(0);										// First netObj (Electronic control unit.)
 	aName.setFunctInst(0);									// First depth transducer.
 	aName.setFunction(DEV_FUNC_GP_SENSE);				// Sensor box of some sort.
 	aName.setVehSys(DEV_CLASS_INST);						//	We are an instrument.
 	aName.setSystemInst(0);									// We are the first of our device class.
 	aName.setIndGroup(Marine);								// What kind of machine are we ridin' on?
-	netObj::begin(&aName,35,arbitraryConfig);			// Here's our name, default address and address category.													
+	netObj::begin(&aName,37,arbitraryConfig);			// Here's our name, default address and address category.													
 	pinMode(resetPin, OUTPUT);								// Setup our reset pin.
 	delay(50);													// Sit for a bit..
 	digitalWrite(resetPin, LOW);							// Set reset low.
@@ -38,6 +38,8 @@ bool llama2000::begin(int inCSPin) {
 	return CAN.begin(500E3);								// Fire up the hardware.
 }
 
+//commandConfig
+//arbitraryConfig
 
 void llama2000::sendMsg(message* outMsg) {
 	
@@ -188,7 +190,7 @@ float waterTempObj::getTemp(void) { return degF; }
    
 	fluidType	= fuel;  // This is 0.
    level       = 0;
-   setSendInterval(0/*2500*/);
+   setSendInterval(2500);
 }
  
 
@@ -209,12 +211,13 @@ void fluidLevelObj::setCapacity(float inCapacity) { capacity = inCapacity; }
 
 // Using this guy to debug/see wwhat's going on with the fuel sensor. Looks like all it gives me is zeros.
 bool fluidLevelObj::handleMsg(message* inMsg) {
-
+	/*
 	if (inMsg->getSourceAddr()==187) {
 		inMsg->showMessage();
 		Serial.println();
 		return true;
 	}
+	*/
 	return false;
 }
 	
@@ -230,9 +233,9 @@ void fluidLevelObj::newMsg(void) {
    outMsg.setPriority(6);
    outMsg.setSourceAddr(ourNetObj->getAddr());
    
-   aByte = 0/*instance*/ & 0b00001111;
-   aByte = aByte<<4;
-   aByte = aByte | ((byte)fluidType & 0b00001111);
+   aByte = 0; 														// instance is zero in this example.
+   aByte = aByte<<4;												// Not zero, this'll shift it over.
+   aByte = aByte | ((byte)fluidType & 0b00001111); 
    outMsg.setDataByte(0,aByte);
    
    tempInt = round(level*250);
