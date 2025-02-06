@@ -1347,14 +1347,16 @@ void netObj::addMsgHandler(msgHandler* inHanldler) {
 }
 
 
-// When a message comes in from the net, pass it in here. -(8 or less data bytes)-
+// When a message comes in from the net, pass it in here. -(8 or less data bytes)- For now
+// we just stuff it into the incoming message queue. During idle time we'll grab messages
+// out of that queue and deal with them or pass them on to the user's handlers.
 void netObj::incomingMsg(message* inMsg) {
 
 	msgObj*	newMsg;
 	
 	if (inMsg) {												// First sanity. Did they slip us a NULL?
 		if (!ourXferList.handledMsg(inMsg,true)) {	// Not NULL. Ok, if the xfer list doesn't want it..
-			newMsg = new msgObj(inMsg);					// Make up a msgObj and stuff it in there.
+			newMsg = new msgObj(inMsg);					// Make up a msgObj..
 			if (newMsg) {										// Got one?
 				ourMsgQ.push(newMsg);						// Stuff it into the queue.
 			}
@@ -1363,7 +1365,9 @@ void netObj::incomingMsg(message* inMsg) {
 }
 
 
-// When we want a message sent out, pass it in here. -(Can have > 8 data bytes)-
+// When we want a message sent out, it's passed in here. If the message's data section is
+// greater than 8 bytes, this will automatically send it to the transfer list to be broken
+// into a set of multi packet messages and be sent one by one. -(Can have > 8 data bytes)-
 void netObj::outgoingingMsg(message* outMsg) {
 
 	if (outMsg) {											// First sanity. Always check for NULL.
@@ -1376,47 +1380,49 @@ void netObj::outgoingingMsg(message* outMsg) {
 }
 
 
-// First  we see if it's a network task that we have to handle ourselves. Then, if not, we
-// ask each the handlers if one of them can handle it. Once a msgHandler handles it, or
-// none will. We are done.	-(Can have > 8 data bytes)-
+// This is where we actually handle the vetted incoming messages. The multi packet
+// messages are already assembled as messages with >8 byte data blocks. First we see if
+// it's a network task. These we have to handle ourselves. Then, if not, we ask each the
+// handlers if one of them can handle it. Once a msgHandler handles it, or
+// none will. We are done.	-(Can have > 8 data bytes, see above)-
 void netObj::checkMessages(void) {
 
 	msgObj*			aMsg;
 	msgHandler*		trace;
 	bool				done;
 	
-	aMsg = (msgObj*)ourMsgQ.pop();
-	if (aMsg) {
-		if (isReqAddrClaim(aMsg)) {
-			handleReqAdderClaim(aMsg);
+	aMsg = (msgObj*)ourMsgQ.pop();										// Pop off the next message object.
+	if (aMsg) {																	// If we got one..
+		if (isReqAddrClaim(aMsg)) {										// Is it an request address claim? "I want your address and name".
+			handleReqAdderClaim(aMsg);										// Do the request address claim dance.
+		}																			//
+		else if (isAddrClaim(aMsg)) {										// Else if it's an address claim? "I'm going to use this address. You ok with that?"
+			handleAdderClaim(aMsg);											// Check to see if they are trying to take our address. Deal with this!
+		}																			// 
+		else if (isCantClaim(aMsg)) {										// Else if it's it's a can not claim an address?
+			handleCantClaim(aMsg);											// We.. Well, I donno'. I guess it may have been ours, and this is a confirmation we won?
+		}																			//
+		else if (isCommandedAddr(aMsg)) {								// Someone, or something is trying to change our address.
+			handleComAddr(aMsg);												// If this is all legal, in order and makes sense. We'll do it.
 		}
-		else if (isAddrClaim(aMsg)) {
-			handleAdderClaim(aMsg);
-		}
-		else if (isCantClaim(aMsg)) {
-			handleCantClaim(aMsg);
-		}
-		else if (isCommandedAddr(aMsg)) {
-			handleComAddr(aMsg);
-		}
-		else {
-			if (ourState==running) {
-				done = false;
-				trace = (msgHandler*)getFirst();
-				while(!done) {
-					if (trace) {
-						if (trace->handleMsg(aMsg)) {
-							done = true;
-						} else {
-							trace = (msgHandler*)trace->getNext();
-						}
-					} else {
-						done = true;
-					}
-				}
-			}
-		}
-		delete(aMsg);
+		else {																	// Else this is not something we handle..
+			if (ourState==running) {										// If we are in a running state.
+				done = false;													// Note we're not done.
+				trace = (msgHandler*)getFirst();							// We go through our user's message handlers. Let them have a whack at it.
+				while(!done) {													// For ever handler..
+					if (trace) {												// If non-NULL..
+						if (trace->handleMsg(aMsg)) {						// Can you haled this?
+							done = true;										// If so? We are done.
+						} else {													// Else can't handle it?
+							trace = (msgHandler*)trace->getNext();		//	We grab the next handler on the list.
+						}															// And start all over.
+					} else {														// Else we hit a NULL?
+						done = true;											// In this case we are also done.
+					}																//
+				}																	//
+			}																		//
+		}																			//
+		delete(aMsg);															// And in the end of it all, we recycle the message object.
 	}
 }
 			
@@ -1424,15 +1430,15 @@ void netObj::checkMessages(void) {
 // Calculate and start the startup time delay. Function of address.
 void netObj::startHoldTimer(void) {
 	
-	if (addr>=0 && addr <=127) {
-		holdTimer.setTime(.1);
-		return;
-	}
-	if (addr>=248 && addr <=253) {
-		holdTimer.setTime(.1);
-		return;
-	}
-	holdTimer.setTime(250);
+	if (addr>=0 && addr <=127) {		// If our address is in this range..
+		holdTimer.setTime(.1);			// We set the timer to this.
+		return;								// All done.
+	}											// 
+	if (addr>=248 && addr <=253) {	// No? Well if our address is in this range..
+		holdTimer.setTime(.1);			// We set the timer to this.
+		return;								// All done.
+	}											//
+	holdTimer.setTime(250);				// If not sett it to this.
 }
 
 
@@ -1459,7 +1465,7 @@ void netObj::changeState(netObjState newState) {
 				default	: 										break;	// No other path to take here.
 			}
 		break;
-		case startHold :													// **    We are in startHold state     **
+		case startHold :													// **   We are in startHold state   **
 			switch(newState) {											// **   And we want to switch to..  **
 				case arbit		:											// Shift into arbitration?
 					if (ourAddrCat==arbitraryConfig) {				// If this is a legal state for us..
@@ -1510,7 +1516,7 @@ void netObj::changeState(netObjState newState) {
 				default			:								break;	// We just stay in error state.
 			}																	//
 		break;																//
-		default					:								break;	// Other states will be switch elsewhere.
+		default					:								break;	// Other states will be switched elsewhere.
 	}
 }
 
@@ -1701,14 +1707,18 @@ void netObj::handleCantClaim(message* inMsg) { }
 // There is a command that sends netObj's new addresses to switch to. We deal with these
 // here.
 void netObj::handleComAddr(message* inMsg) {
-
-	if (ourAddrCat==commandConfig) {				// Only commandConfig addressing can do this.
-		switch(ourState) {							// If our state is..
-			case running	:							// Running is the only state we COULD see it in.
-				addr = inMsg->getDataByte(8);		// Grab the address and plug it in.
-				sendAddressClaimed(true);			// Tell the neighborhood.
-			break;										// And we're done.
-			default			: break;					// Else we just ignore it. They are crazy. Or power hungry.
+	
+	if (ourAddrCat==commandConfig) {								// Only commandConfig addressing can do this.
+		if (inMsg->getNumBytes()==9) {							// Command messages ALL have 9 byte data sections.
+			if (sameName((netName*)inMsg->passData())) {		// Is this message carrying our name in it?
+				switch(ourState) {									// If our state is..
+					case running	:									// Running is the only state we COULD see it in.
+						addr = inMsg->getDataByte(8);				// Grab the address and plug it in.
+						sendAddressClaimed(true);					// Tell the neighborhood.
+					break;												// And we're done.
+					default			: break;							// Else we just ignore it. They are crazy. Or power hungry.
+				}
+			}
 		}
 	}
 }
@@ -1736,7 +1746,7 @@ void netObj::startArbit(void) {
 	} else {													// Else we DO have an address..
 		sendAddressClaimed();							// See if we can claim what we got.
 		arbitTimer.setTime(250);						// Set the timer.
-		ourArbitState=waitingForClaim;
+		ourArbitState=waitingForClaim;				// Note that we are waiting for a claim.
 	}
 }
 
