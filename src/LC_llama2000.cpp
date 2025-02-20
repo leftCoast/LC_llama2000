@@ -20,15 +20,15 @@ bool llama2000::begin(int inCSPin) {
 	
 	netName	aName;
 	
-	aName.setID(6387);										// Device ID. We make these up. You get 21 bits. (2097151 or less)
-	aName.setManufCode(73);									// This would be assigned to you by NMEA people.
+	aName.setID(DEVICE_ID);									// Device ID. We make these up. You get 21 bits. (2097151 or less)
+	aName.setManufCode(MANF_CODE);						// This would be assigned to you by NMEA people.
 	aName.setECUInst(0);										// First netObj (Electronic control unit.)
 	aName.setFunctInst(0);									// First depth transducer.
 	aName.setFunction(DEV_FUNC_GP_SENSE);				// Sensor box of some sort.
 	aName.setVehSys(DEV_CLASS_INST);						//	We are an instrument.
 	aName.setSystemInst(0);									// We are the first of our device class.
 	aName.setIndGroup(Marine);								// What kind of machine are we ridin' on?
-	netObj::begin(&aName,37,arbitraryConfig);			// Here's our name, default address and address category.													
+	netObj::begin(&aName,DEF_ADDR,ADDR_CAT);			// Here's our name, default address and address category.													
 	pinMode(resetPin, OUTPUT);								// Setup our reset pin.
 	delay(50);													// Sit for a bit..
 	digitalWrite(resetPin, LOW);							// Set reset low.

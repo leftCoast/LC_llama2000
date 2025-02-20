@@ -205,7 +205,13 @@ void message::setDataByte(int index,byte inByte) { msgData[index] = inByte; }
 byte message::getDataByte(int index) { return msgData[index]; }
 
 
-// Ok, this one passes the pointer to our data buffer to someone else to own. We give up
+// This one passes the pointer to our data buffer to someone else and TRUSTS them to NOT
+// MESS WITH IT. For educational purposes only! Actually, this is used in the commanded
+// address stuff to see who the command is actually adressed to. Non-destructively.
+byte* message::peekData(void) { return msgData; }
+
+
+// Ok, this one passes the pointer to our data buffer to SOMEONE ELSE TO OWN. We give up
 // ownership to it completely. This is used for multi packet transfers. We are basically
 // pulled apart and our data is used to form a multi packet dats stream for trasmission.
 // Really, it doesn't hurt, much.
@@ -220,10 +226,15 @@ byte* message::passData(void) {
 }
 
 
-
-// This takes our data bytes, MUST be eight in this case. Converts it to a netName and
-// compares it to the passed in name. If the message's name is less in value than the
-// passed in name, message owner's name wins the battle.
+// We are the message from some netItem. We have a netName built into us. (Messages have
+// names of senders built in.) Something can grab us, as a message, and stuff in
+// their name to see if our name is less than theirs. This is how net name battles are
+// decided. The smaller value wins.
+//
+// So, that being said. During arbitration, our guy asks to claim an address. If someone
+// already "owns" that address, they send back a message. That message will also carry
+// their name. Our guy grabs the incoming message, makes this call with their own name
+// passed in. This is basically asking if THEY win or not. This RETURNS TRUE IF THEY WON.
 bool message::msgIsLessThanName(netName* inName) {
 	
 	netName	msgName;
@@ -236,6 +247,19 @@ bool message::msgIsLessThanName(netName* inName) {
 	}															//
 	return false;											// Default to NOT less than.
 }	
+
+
+bool message::isBroadcast(void) {
+
+	uint32_t	PGN;
+	
+	PGN = getPGN();
+	if (PGN>=0x00F000 && PGN<=0x00FEFF) return true;
+	if (PGN>=0x00F00 && PGN<=0x00FFFF) return true;
+	if (PGN>=0x01F000 && PGN<=0x01FEFF) return true;
+	if (PGN>=0x01FF00 && PGN<=0x01FFFF) return true;
+	return false;
+}
 
 
 void message::showMessage(void) {
@@ -460,10 +484,24 @@ uint16_t netName::getManufCode(void) { return name[3]<<3 | (name[2] >> 5);  }
 
 void netName::setManufCode(uint16_t manfCode) {
 
+	/*
 	name[2] &= ~(0x7<<5); //Clear bits byte 3
 	name[3] = 0; //Clear bits byte 4
 	name[2] = name[2] | (manfCode<<3 & 0xE0);
 	name[3] = manfCode>>3;
+	*/
+	
+	byte	b2;
+	byte	b3;
+	
+	b2 = manfCode & 0b00000111;		// Grab the low three of the code
+	b2 = b2 << 5;							// Shift these three to the top end of byte.
+	b3 = manfCode & 0b11111000;		// Grab the high 5 bits of the code.
+	b3 = b3 >> 3;							// Shift those five down to the bottom of byte.
+	name[2] = name[2] & 0b00011111;	// Clear out the top three bits of byte 2.
+	name[2] = name[2] | b2;				// Merge our 3 bits into that top place.
+	name[3] = name[3] & 0b11100000;	// Clear out the bottom 5 bits of byte 3.
+	name[3] = name[3] | b3;				// Merge our 5 bits into that bottom place.
 }
 
 
@@ -502,10 +540,15 @@ void netName::showName(void) {
 		case Industrial	: Serial.println("Industrial"); break;
 	}				
 	if (getArbitraryAddrBit()) {
-		Serial.print("Addr bit        : Does auto addressing.");
+		Serial.println("Addr bit        : Does auto addressing.");
 	} else {
-		Serial.print("Addr bit        : Does NOT do auto addressing.");
-	} 
+		Serial.println("Addr bit        : Does NOT do auto addressing.");
+	}
+	Serial.println("As bytes.  --------");
+	for (int i=0;i<8;i++) {
+		Serial.print("[");Serial.print(name[i]);Serial.print("]\t");
+	}
+	Serial.println();
 }
 
 
@@ -714,7 +757,7 @@ void xferNode::addMsgToQ(message* msg) {
 }
 
 
-// Send data message. All the infor needed to do this should be in our local globals.
+// Send data message. All the info needed to do this should be in our local globals.
 bool xferNode::sendDataMsg(void) {
 
 	message	dataMsg;
@@ -733,7 +776,7 @@ bool xferNode::sendDataMsg(void) {
 			dataMsg.setDataByte(i,outData[byteTotal++]);		// Write the data byte.
 		}																	//
 	}																		//
-	ourNetObj->sendMsg(&dataMsg);									// And its on it's way!
+	ourNetObj->outgoingingMsg(&dataMsg);						// And its on it's way!
 	return byteTotal>=msgSize;										// Return if this was the last or not.
 }
 
@@ -796,7 +839,7 @@ void xferNode::sendflowControlMsg(uint32_t aPGN,flowContType msgType,abortReason
 	aPGN = aPGN >> 8;												// Slide over PGN.
 	aByte = aPGN & 0x000000FF;									// Grab LSB
 	flowContMsg.setDataByte(7,aByte);						// Stuff it in place. All done!
-	ourNetObj->sendMsg(&flowContMsg);						// And its on it's way!
+	ourNetObj->outgoingingMsg(&flowContMsg);				// Off it goes!
 }
 
 // BYTE 4 : In a broadcast this is supposed to be set to 0xFF meaning unlimited amount of
@@ -816,7 +859,7 @@ outgoingBroadcast::outgoingBroadcast(message* inMsg,netObj* inNetObj)
 	: xferNode(inNetObj) {
 	
 	uint32_t	aPGN;
-	
+	Serial.println("Starting broadcast.");
 	if (inMsg && inNetObj) {						// As always, check sanity..
 		msgSize = inMsg->getNumBytes();			// Save off the size. Just in case..
 		if (msgSize>8) {								// If its's too big..
@@ -1219,39 +1262,39 @@ bool  xferList::handledMsg(message* ioMsg,bool received) {
 	xferNode*	trace;
 	bool			handled;
 	
-	handled = false;															// Assume we don't handle this.
-	if (ioMsg && ourNetObj) {												// Sanity first, is it not NULL? Is netObj not NULL?
-		if (received) {														// If its from the net..
-			if (ioMsg->getPDUf()==FLOW_CON_PF) {								// If we have an incoming BAM message..
-				if (ioMsg->getPDUs()==GLOBAL_ADDR) {					// If the message is a broadcast..
-					addXfer(ioMsg,broadcastIn);							// Setup a brodcast transfer.
-					handled = true;											//
-				} else {															// Else it's peer to peer..
-					if (ioMsg->getPDUs()==ourNetObj->getAddr()) {	// If it's actually to us..
-						addXfer(ioMsg,peerToPeerIn);						// Setup a brodcast transfer.
-						handled = true;										//
-					}																//
-				}																	//
-			}																		//
-		} else {																	// Else we wrote it!
-			if (ioMsg->getNumBytes()>8) {									// If message is oversized..
-				if (ioMsg->getPDUs()==GLOBAL_ADDR) {					// If the message is a broadcast..
-					addXfer(ioMsg,broadcastOut);							// Setup a brodcast transfer.
-				} else {															// Else it's NOT a broadcast..
-					addXfer(ioMsg,peerToPeerOut);							// Set up a peer to peer transfer.
-				}																	//
-				handled = true;												// In any case, it's been handled.
-			}																		//
-		}																			//
-		if (!handled) {														// If the message has NOT been handled..
-			trace = (xferNode*)getFirst();								// Grab first handler node from the list.
-			while(trace && !handled) {										// While we have non NULL node AND message has not been handled..
-				handled = trace->handleMsg(ioMsg);						// Ask each node if they want/need to handle this message.
-				trace = (xferNode*)trace->getNext();					// Then jump to the next node regardless of the answer.
-			}																		// That's it. either the message was handled or not.
-		}																			// 
-	}																				//
-	return handled;															// Return the final result.
+	handled = false;																		// Assume we don't handle this.
+	if (ioMsg && ourNetObj) {															// Sanity first, is it not NULL? Is netObj not NULL?
+		if (received) {																	// If its from the net..
+			if (ioMsg->getPDUf()==FLOW_CON_PF) {									// If we have an incoming BAM message..
+				if (ioMsg->isBroadcast()||ioMsg->getPDUs()==GLOBAL_ADDR) {	// If the message is a broadcast..
+					addXfer(ioMsg,broadcastIn);										// Setup a brodcast transfer.
+					handled = true;														//
+				} else {																		// Else it's peer to peer..
+					if (ioMsg->getPDUs()==ourNetObj->getAddr()) {				// If it's actually to us..
+						addXfer(ioMsg,peerToPeerIn);									// Setup a brodcast transfer.
+						handled = true;													// We handled it.
+					}																			//
+				}																				//
+			}																					//
+		} else {																				// Else we wrote it!
+			if (ioMsg->getNumBytes()>8) {												// If message is oversized..
+				if (ioMsg->isBroadcast()||ioMsg->getPDUs()==GLOBAL_ADDR) {	// If the message is a broadcast..
+					addXfer(ioMsg,broadcastOut);										// Setup a brodcast transfer.
+				} else {																		// Else it's NOT a broadcast..
+					addXfer(ioMsg,peerToPeerOut);										// Set up a peer to peer transfer.
+				}																				//
+				handled = true;															// In any case, it's been handled.
+			}																					//
+		}																						//
+		if (!handled) {																	// If the message has NOT been handled..
+			trace = (xferNode*)getFirst();											// Grab first handler node from the list.
+			while(trace && !handled) {													// While we have non NULL node AND message has not been handled..
+				handled = trace->handleMsg(ioMsg);									// Ask each node if they want/need to handle this message.
+				trace = (xferNode*)trace->getNext();								// Then grab the next node regardless of the answer.
+			}																					// That's it. either the message was handled or not.
+		}																						// 
+	}																							//
+	return handled;																		// Return the final result.
 }
 
 
@@ -1367,7 +1410,7 @@ void netObj::incomingMsg(message* inMsg) {
 
 // When we want a message sent out, it's passed in here. If the message's data section is
 // greater than 8 bytes, this will automatically send it to the transfer list to be broken
-// into a set of multi packet messages and be sent one by one. -(Can have > 8 data bytes)-
+// into a set of multi packet messages. -(Can have > 8 data bytes)-
 void netObj::outgoingingMsg(message* outMsg) {
 
 	if (outMsg) {											// First sanity. Always check for NULL.
@@ -1403,7 +1446,7 @@ void netObj::checkMessages(void) {
 			handleCantClaim(aMsg);											// We.. Well, I donno'. I guess it may have been ours, and this is a confirmation we won?
 		}																			//
 		else if (isCommandedAddr(aMsg)) {								// Someone, or something is trying to change our address.
-			handleComAddr(aMsg);												// If this is all legal, in order and makes sense. We'll do it.
+			handleComAddr(aMsg);												// If this is all legal, in order, and makes sense. We'll do it.
 		}
 		else {																	// Else this is not something we handle..
 			if (ourState==running) {										// If we are in a running state.
@@ -1488,7 +1531,7 @@ void netObj::changeState(netObjState newState) {
 				break;														//
 				default			: 								break;	// No other path to take here.
 			}
-		break;																	//
+		break;																//													//
 		case running	:													// **   We are in running state     **
 			switch(newState) {											// **   And we want to switch to..  **
 				case arbit		:											// Arbitration mode? We'll see..
@@ -1525,11 +1568,11 @@ void netObj::changeState(netObjState newState) {
 void netObj::stateName(netObjState aState) {
 	
 	switch(aState) {
-		case config		: Serial.print("Configuration");	break;
-		case startHold	: Serial.print("Start wait");		break;
-		case arbit		: Serial.print("Arbitration");	break;
-		case running	: Serial.print("Running");			break;
-		case addrErr	: Serial.print("Address error");	break;
+		case config		: Serial.print("Configuration");		break;
+		case startHold	: Serial.print("Start wait");			break;
+		case arbit		: Serial.print("Arbitration");		break;
+		case running	: Serial.print("Running");				break;
+		case addrErr	: Serial.print("Address error");		break;
 	}
 }
 
@@ -1709,14 +1752,11 @@ void netObj::handleCantClaim(message* inMsg) { }
 void netObj::handleComAddr(message* inMsg) {
 	
 	if (ourAddrCat==commandConfig) {								// Only commandConfig addressing can do this.
-		if (inMsg->getNumBytes()==9) {							// Command messages ALL have 9 byte data sections.
-			if (sameName((netName*)inMsg->passData())) {		// Is this message carrying our name in it?
-				switch(ourState) {									// If our state is..
-					case running	:									// Running is the only state we COULD see it in.
-						addr = inMsg->getDataByte(8);				// Grab the address and plug it in.
-						sendAddressClaimed(true);					// Tell the neighborhood.
-					break;												// And we're done.
-					default			: break;							// Else we just ignore it. They are crazy. Or power hungry.
+		if (inMsg->getNumBytes()==9) {							// These messages MUST have 9 byte data sections.
+			if (sameName((netName*)inMsg->peekData())) {		// Is this message carrying our name in it? (Is it for us?)
+				if (ourState==running) {							// If our state is running. The only state we COULD see it in.
+					addr = inMsg->getDataByte(8);					// Grab the address and plug it in.
+					sendAddressClaimed(true);						// Tell the neighborhood.
 				}
 			}
 		}
@@ -1811,7 +1851,7 @@ void netObj::sendRequestForAddressClaim(byte inAddr) {
 	ourMsg.setSourceAddr(getAddr());		// Set our address.
 	ourMsg.setPGN(REQ_MESSAGE);			// Set the PGN..
 	ourMsg.setPDUs(inAddr);					// Then set destination address as lower bits of PGN.
-	sendMsg(&ourMsg);							// Off it goes!
+	outgoingingMsg(&ourMsg);				// Off it goes!
 }
 
 
@@ -1831,29 +1871,46 @@ void netObj::sendAddressClaimed(bool tryFail) {
 	}													//
 	ourMsg.setPGN(ADDR_CLAIMED);				// Set the PGN..
 	ourMsg.setPDUs(GLOBAL_ADDR);				// Then set destination address as lower bits of PGN.
-	sendMsg(&ourMsg);								// Off it goes!													
+	outgoingingMsg(&ourMsg);					// Off it goes!													
 }
 
 
 void netObj::sendCannotClaimAddress(void) { sendAddressClaimed(false); }
 
 
-void netObj::sendCommandedAddress(byte comAddr) {
+// Address command :
+// There is a myriad ways for this command to fail. The documentation for it, in the book
+// I used was scrambled up by an uncaught editing error. I was able to piece together what
+// I think is how it works? Basically, you broadcast a name with the 9th data byte set the
+// new address that the named item should move to. Of all the values for PDU format &
+// specific etc. That I came up with, I choose the ones that turned up the most, and that
+// the different pieces matched up mathematically. I still don't know what the value 216
+// has to do with anything.
+//
+// So to use this, find the name of the item you would like to move to a new address. Drop
+// the name and new address in here and it'll send out the message. You will need to
+// update the address list by calling sendRequestForAddressClaim(GLOBAL_ADDR), wait for a
+// few ms, 750? Then check your list to see if your guy actually moved or not.
+void netObj::addrCom(netName* nameObj,byte newAddr) {
 	
-	message	ourMsg(9);							// Create a 9 byte message.
-	byte*		ourName;								// Pointer for our name's data.
-	
-	ourName = getName();							// Get a fresh copy of our name.
-	for(int i=0;i<8;i++) {						// For each byte in our name..
-		ourMsg.setDataByte(i,ourName[i]);	// Set our name byte into the message data buffer.
-	}													//
-	ourMsg.setDataByte(8,comAddr);			// Set our commanded address byte into the message.
-	ourMsg.setSourceAddr(getAddr());			// Set our address.
-	ourMsg.setPGN(COMMAND_ADDR);				// Set the PGN..
-	sendMsg(&ourMsg);								
+	message	comMsg;
+	byte*		namePtr;
+											
+	if (nameObj) {														// Sanity, make sure they actually sent a name.
+		comMsg.setNumBytes(9);										// Extra byte needed for this one.
+		comMsg.setPGN(COMMAND_ADDR);								// Set in the command PGN.
+		comMsg.setPriority(DEF_PRIORITY);						// And this.
+		comMsg.setSourceAddr(addr);								// Our current address.		
+		namePtr = nameObj->getName();								// Ok, we get a pointer to their name data.
+		for (int i=0;i<8;i++) {										// For each byte..
+			comMsg.setDataByte(i,namePtr[i]);					// Plunk it into our comMsg data buffer.
+		}																	//
+		comMsg.setDataByte(8,newAddr);							// In the (9th) byte, stuff in the new address.
+		outgoingingMsg(&comMsg);									// Send it on it's way!
+	}														
 }
 
-		
+	
 // Deal with timers, See if any msgHandler's need to output messages of their own. Or other chores
 // we know nothing about.
 void netObj::idle(void) {

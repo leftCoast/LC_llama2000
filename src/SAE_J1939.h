@@ -142,9 +142,11 @@ class message {
 				byte		getSourceAddr(void);
 				void		setDataByte(int index,byte inByte);
 				byte		getDataByte(int index);
+				byte*		peekData(void);
 				byte*		passData(void);
-				void		showMessage(void);
 				bool		msgIsLessThanName(netName* inName);
+				bool		isBroadcast(void);							// If the message is complete we can read this.
+				void		showMessage(void);
 				
 	protected:
 				int		numBytes;	// Size of our data buffer.
@@ -682,11 +684,11 @@ class netObj :	public linkList,
 				netObj(void);
 	virtual	~netObj(void);
 	
-	virtual	void		begin(netName* inName,byte inAddr,addrCat inAddCat);	// Initial setup.
-	virtual	void		addMsgHandler(msgHandler* inCA);								// Add the handlers of the messages you would like to send/receive.
-	virtual  void		sendMsg(message* outMsg)=0;									// You have to fill this one out. (8 or less data bytes)
-	virtual  void		incomingMsg(message* inMsg);									// When a message comes in from the net, pass it in here. -(8 or less data bytes)-
-	virtual  void		outgoingingMsg(message* inMsg);								// When we want a message sent out, pass it in here. -(Can have > 8 data bytes)-
+	virtual	void		begin(netName* inName,byte inAddr,addrCat inAddCat);	// ** YOU WILL NEED TO CALL THIS BEFOR USE ** - Initial setup.
+	virtual	void		addMsgHandler(msgHandler* inCA);								// ** USE THIS TO ADD YOUR HANDLER OBJECTS FOR THE MESSAGEDS YOU WANT TO SEND/RECEIVE **
+	virtual  void		sendMsg(message* outMsg)=0;									// ** YOU WRITE THIS ONE TO SEND 8 BYTE OR SMALLER MESSAGES. DON'T CALL IT! **
+	virtual  void		incomingMsg(message* inMsg);									// ** WHEN A MESSAGE COMES IN FROM THE HARDWARE, PASS IT IN HERE. **
+	virtual  void		outgoingingMsg(message* inMsg);								// ** USE THIS TO SEND MESSAGES ** IT CAN HANDLE >8 BYTE MESSAGES AND WILL CALL sendMsg() FOR YOU.
 				void		checkMessages(void);												// If we have one we'll grab it and deal with it. -(Can have > 8 data bytes)-
 				void		startHoldTimer(void);											// Calculate and start the address holding time delay. Function of address.
 				void		clearErr(void);													// This will clear the address error and restart the process.
@@ -711,14 +713,16 @@ class netObj :	public linkList,
 				void		handleComAddr(message* inMsg);								// Handle a commanded address message.
 				void		startClaimTimer(void);											// Calculate and start the claim time delay. Random function.
 				void		startArbit(void);													// From whatever state we are in now, start arbitration.
+				void		startAddCom(void);												// Changing state to telling someone to goto a new address.
 				byte		chooseAddr(void);													// We have a list of claimed addresses and a range of allowed addresses. Find one.
 				void		checkArbit(void);													// Arbitration is all about wait states.
 				void		sendRequestForAddressClaim(byte inAddr);					// Tell us your name and address.
 				void		sendAddressClaimed(bool tryFail=true);						// This is our name and address.
 				void		sendCannotClaimAddress(void);									// We can't find an address!
-				void		sendCommandedAddress(byte comAddr);							// HEY YOU! Set this as your address!
+				void		addrCom(netName* objName,byte newAddr);					// ** CALL THIS TO CHANGE AN ECU'S ADDRES **
+
 				
-	virtual	void			idle(void);
+	virtual	void			idle(void);														// Keeping things running.
 	
 				msgQ			ourMsgQ;															// A place to store incoming messages.
 				
@@ -731,7 +735,7 @@ class netObj :	public linkList,
 				timeObj		arbitTimer;														// Arbitration timer.
 				addrList		ourAddrList;													// List of used addresses from the network.
 				
-				xferList		ourXferList;													// The transport protocol list. (UNFINISHED)
+				xferList		ourXferList;													// The transport protocol list.
 };
 
 
