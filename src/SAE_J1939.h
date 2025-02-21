@@ -71,7 +71,7 @@
 #define DEF_DP				false		// DP (Data page) All doc.s say to leave it  as 0. But nearly ALL NMEA 2000 sets it as high order PGN bit (1).
 
 
-// These guys are times for holding, timeout etc. Used in the peer to peer muti-packet code. Right out of the book.
+// These guys are times for holding, timeout etc. Used in the peer to peer, broadcasts, muti-packet code. Right out of the book.
 #define TR_MS				200		// Response time.
 #define TH_MS				550		// Holding time. (Sent every 500 ms. So we addd a bit to be nice.)
 #define T1_MS				750		// The rest seem to be unspecified.
@@ -389,6 +389,7 @@ class netName {
 		uint32_t	getID(void);								// 21 bit - Unique Fixed value. Product ID & Serial number kinda' thing.
 		void		setID(uint32_t inID);
 		
+		void  	showManuf(int manuf);					// Helper for..
 		void		showName(void);							// Human readable printout.
 
 	protected:
@@ -441,7 +442,7 @@ public:
 
 
 // ***************************************************************************************
-//				-----    xferList   &  xferNode    -----
+//				         -----    xferList   &  xferNode    -----
 // ***************************************************************************************
 
 // [32] [Size LSB] [Size MSB] [numPacks] [0xFF] [PGN LSB] [PGN2] [PGN MSB]
@@ -684,11 +685,12 @@ class netObj :	public linkList,
 				netObj(void);
 	virtual	~netObj(void);
 	
-	virtual	void		begin(netName* inName,byte inAddr,addrCat inAddCat);	// ** YOU WILL NEED TO CALL THIS BEFOR USE ** - Initial setup.
+	virtual	void		begin(netName* inName,byte inAddr,addrCat inAddCat);	// ** YOU WILL NEED TO CALL THIS BEFORE USE ** - Initial setup.
 	virtual	void		addMsgHandler(msgHandler* inCA);								// ** USE THIS TO ADD YOUR HANDLER OBJECTS FOR THE MESSAGEDS YOU WANT TO SEND/RECEIVE **
 	virtual  void		sendMsg(message* outMsg)=0;									// ** YOU WRITE THIS ONE TO SEND 8 BYTE OR SMALLER MESSAGES. DON'T CALL IT! **
 	virtual  void		incomingMsg(message* inMsg);									// ** WHEN A MESSAGE COMES IN FROM THE HARDWARE, PASS IT IN HERE. **
 	virtual  void		outgoingingMsg(message* inMsg);								// ** USE THIS TO SEND MESSAGES ** IT CAN HANDLE >8 BYTE MESSAGES AND WILL CALL sendMsg() FOR YOU.
+				void		refreshAddrList(void);											// ** USE THIS TO CLEAR THEN REFRESH THE ADDRESS LIST, GIVE IT A SECOND TO COMPLETE. **
 				void		checkMessages(void);												// If we have one we'll grab it and deal with it. -(Can have > 8 data bytes)-
 				void		startHoldTimer(void);											// Calculate and start the address holding time delay. Function of address.
 				void		clearErr(void);													// This will clear the address error and restart the process.
@@ -701,7 +703,7 @@ class netObj :	public linkList,
 				byte		getAddr(void);														// Here's our current address.
 				byte		findAddr(netName* inName);										// If we have a device's netName, see if we can find it's address.
 				netName	findName(byte inAddr);											// If we have a device's address, see if we can find it's name.
-				void		showAddrList(bool showNames);									// Another human readable printout.
+				void		showAddrList(bool showNames);									// ** Another human readable printout. **
 				
 				bool		isReqAddrClaim(message* inMsg);								// Is this a request for address claimed msg?
 				bool		isAddrClaim(message* inMsg);									// Is this an address claimed msg?
@@ -711,7 +713,8 @@ class netObj :	public linkList,
 				void		handleAdderClaim(message* inMsg);							// Handle an address claimed msg.
 				void		handleCantClaim(message* inMsg);								// Handle a failed to claim an address msg.				
 				void		handleComAddr(message* inMsg);								// Handle a commanded address message.
-				void		startClaimTimer(void);											// Calculate and start the claim time delay. Random function.
+				void		startArbitTimer(void);											// Calculate and start the arbitration time delay. Random function.
+				void		startClaimTimer(void);											// Calculate and start the claim time delay. Same random function.
 				void		startArbit(void);													// From whatever state we are in now, start arbitration.
 				void		startAddCom(void);												// Changing state to telling someone to goto a new address.
 				byte		chooseAddr(void);													// We have a list of claimed addresses and a range of allowed addresses. Find one.
@@ -733,6 +736,7 @@ class netObj :	public linkList,
 				byte			addr;																// Our current network address.
 				arbitState	ourArbitState;													// Arbitration has a couple wait states.
 				timeObj		arbitTimer;														// Arbitration timer.
+				timeObj		claimTimer;
 				addrList		ourAddrList;													// List of used addresses from the network.
 				
 				xferList		ourXferList;													// The transport protocol list.

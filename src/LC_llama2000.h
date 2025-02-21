@@ -12,19 +12,28 @@
 #define DEF_2515_RST_PIN   8
 #define DEF_2515_INT_PIN   2
 
+//#define SECOND_LLAMA	// Comment out for first llama, uncomment for second llama.
 
-#define DEVICE_ID	6387					// 6387 Foxtrot. 
-#define MANF_CODE	35						// J/35
-#define DEF_ADDR	40						// Easy to spot.
-#define ADDR_CAT	arbitraryConfig	// Can do the address dance.
+#ifdef SECOND_LLAMA
 
-/*
-// The "other device" for testing.
+// Second llama. The "other device" for testing.
 #define DEVICE_ID	1706					// 1706 Mike. 
 #define MANF_CODE	73						// PT 73
 #define DEF_ADDR	44						// Also easy to spot.
 #define ADDR_CAT	commandConfig		// Can be told where to go.
-*/
+
+#else
+
+// First llama.
+#define DEVICE_ID	6387					// 6387 Foxtrot. 
+#define MANF_CODE	35						// J/35
+#define DEF_ADDR	45						// Easy to spot.
+#define ADDR_CAT	arbitraryConfig	// Can do the address dance.
+
+#endif
+
+
+
 
 // ************ llama2000 ************
 
