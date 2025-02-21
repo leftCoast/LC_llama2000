@@ -519,10 +519,25 @@ void netName::setID(uint32_t value) {
 }
 
 
+// There are zillions of manufactere's names. Put the ones you know and see a lot of in
+// here for the printout.
+void  netName::showManuf(int manuf) {
+	
+	switch(manuf) {
+		case 644	: Serial.println("Wema U.S.A dba KUS");	break;
+		case 717	: Serial.println("Yacht Devices");			break;
+		case 73	: Serial.println("Left coast #2");			break;
+		case 135	: Serial.println("Airmar"); 					break;
+		case 35	: Serial.println("Left coast #1");			break;
+		default	: Serial.println(manuf);
+	}
+}
+
+
 void netName::showName(void) {
 	
 	Serial.print("ISO ID          : "); Serial.println(getID());			// Device ID. Serial #
-	Serial.print("Manuf code      : "); Serial.println(getManufCode());	// Who made you?					
+	Serial.print("Manuf code      : "); showManuf(getManufCode());			// Who made you?					
 	Serial.print("ECU Inst.       : "); Serial.println(getECUInst());		// What netObj# are you?
 	Serial.print("Funct. Inst.    : "); Serial.println(getFunctInst());	// What # of your thing are you?
 	Serial.print("Actual Funct.   : "); Serial.println(getFunction());	// Depth transducer. Or whatever.
@@ -532,19 +547,19 @@ void netName::showName(void) {
 	Serial.print("Industry group  : "); 											// What kind of machine are we ridin' on?
 	switch(getIndGroup()) {
 		
-		case Global			: Serial.println("Global"); break;
-		case Highway		: Serial.println("Highway"); break;
-		case Agriculture	: Serial.println("Agriculture"); break;
-		case Construction	: Serial.println("Construction"); break;
-		case Marine			: Serial.println("Marine"); break;
-		case Industrial	: Serial.println("Industrial"); break;
+		case Global			: Serial.println("Global");			break;
+		case Highway		: Serial.println("Highway");			break;
+		case Agriculture	: Serial.println("Agriculture");		break;
+		case Construction	: Serial.println("Construction");	break;
+		case Marine			: Serial.println("Marine");			break;
+		case Industrial	: Serial.println("Industrial");		break;
 	}				
 	if (getArbitraryAddrBit()) {
 		Serial.println("Addr bit        : Does auto addressing.");
 	} else {
 		Serial.println("Addr bit        : Does NOT do auto addressing.");
 	}
-	Serial.println("As bytes.  --------");
+	Serial.print("As bytes        : ");
 	for (int i=0;i<8;i++) {
 		Serial.print("[");Serial.print(name[i]);Serial.print("]\t");
 	}
@@ -552,9 +567,12 @@ void netName::showName(void) {
 }
 
 
+
 // ***************************************************************************************
 //				           -----    addrList   &  addrNode    -----
 // ***************************************************************************************
+//				                -----    addrNode    -----
+
 
 addrNode::addrNode(byte inAddr,netName* inName) 
 	: linkListObj() {
@@ -574,6 +592,9 @@ bool addrNode::isGreaterThan(linkListObj* compObj) { return ((addrNode*)compObj)
 // Are we less than the obj being passed in?	
 bool addrNode::isLessThan(linkListObj* compObj) { return ((addrNode*)compObj)->addr<addr; }
 
+
+
+//				                -----    addrList    -----
 
 
 // Create a new address list.
@@ -1363,6 +1384,9 @@ netObj::netObj(void)
 	
 	ourState	= config;		// We arrive in config mode.
 	addr		= NULL_ADDR;	// No address.
+	holdTimer.reset();		// Shut down the timers so we don't get false triggers.
+	arbitTimer.reset();		//
+	claimTimer.reset();		//
 }
 
 
@@ -1420,6 +1444,19 @@ void netObj::outgoingingMsg(message* outMsg) {
 			sendMsg(outMsg);								// Shove the message out the wire.
 		}
 	}
+}
+
+
+// This is called to first clear the address list, then make the
+// sendRequestForAddressClaim() function to tell everyone to broadcast in their name and
+// addresses. NOTE : This makes the call, but you must wait at least 750 ms before reading
+// the list so everyone has time to respond.
+void netObj::refreshAddrList(void) {
+
+	ourAddrList.dumpList();							// Clear out list of addresses.
+	ourAddrList.addAddr(addr,this);				// Stuff ourselves in first. We can't hear our own broadcasts.
+	sendRequestForAddressClaim(GLOBAL_ADDR);	// Start gathering addresses again.
+	claimTimer.setTime(BCAST_T1_MS);				// Start the claim timer for how long we allow them to come in.
 }
 
 
@@ -1630,10 +1667,10 @@ void netObj::showAddrList(bool showNames) {
 	
 	ourAddrList.showList(showNames);
 	Serial.println();
-	Serial.print(  "OUR Addr & name : ");
-	Serial.println(addr);
-	showName();
-	Serial.println();
+	//Serial.print(  "OUR Addr & name : ");
+	//Serial.println(addr);
+	//showName();
+	//Serial.println();
 }
 
 
@@ -1755,7 +1792,7 @@ void netObj::handleComAddr(message* inMsg) {
 		if (inMsg->getNumBytes()==9) {							// These messages MUST have 9 byte data sections.
 			if (sameName((netName*)inMsg->peekData())) {		// Is this message carrying our name in it? (Is it for us?)
 				if (ourState==running) {							// If our state is running. The only state we COULD see it in.
-					addr = inMsg->getDataByte(8);					// Grab the address and plug it in.
+					setAddr(inMsg->getDataByte(8));				// Grab the address and plug it in.
 					sendAddressClaimed(true);						// Tell the neighborhood.
 				}
 			}
@@ -1764,24 +1801,33 @@ void netObj::handleComAddr(message* inMsg) {
 }
 
 	
+// Calculate and start the arbitration time delay. Random function.	
+void netObj::startArbitTimer(void) {
+
+	long	rVal;
+	
+	rVal = random(TWMIN_MS, TWMAX_MS);
+	arbitTimer.setTime(rVal * 0.6);
+}
+
+
+/*
 // Calculate and start the claim time delay. Random function.	
 void netObj::startClaimTimer(void) {
 
 	long	rVal;
 	
-	rVal = random(0, 256);
-	arbitTimer.setTime(rVal * 0.6);
+	rVal = random(TWMIN_MS, TWMAX_MS);
+	claimTimer.setTime(rVal * 0.6);
 }
+*/
 
-	
 // From whatever state we are in now, start arbitration.
 void netObj::startArbit(void) {
 		
 	if (addr==NULL_ADDR) {								// If we have no current address..
-		ourAddrList.dumpList();							// Clear out list of addresses.
-		ourXferList.dumpList();							// Clear out transfer list as well. Can't finish any.
-		sendRequestForAddressClaim(GLOBAL_ADDR);	// Start gathering addresses again.
-		arbitTimer.setTime(250);						// Set the timer.
+		ourXferList.dumpList();							// Clear out transfer list. Can't finish any.
+		refreshAddrList();								// Makes the call and starts the timer.
 		ourArbitState = waitingForAddrs;				// Note that we are gathering addresses again.
 	} else {													// Else we DO have an address..
 		sendAddressClaimed();							// See if we can claim what we got.
@@ -1819,7 +1865,7 @@ void netObj::checkArbit(void) {
 			addr = chooseAddr();							// Choose an address using the list to compare.
 			if (addr!=NULL_ADDR) {						// If we found an unclaimed one..
 				sendAddressClaimed(true);				// Send address claim on new address.
-				startClaimTimer();						// Start the claim timer.
+				startArbitTimer();						// Start the claim timer.
 				ourArbitState = waitingForClaim;		// And we wait..
 			} else {											// Else ALL are claimed..
 				changeState(addrErr);					// We have failed.
@@ -1942,6 +1988,9 @@ void netObj::idle(void) {
 				trace->idleTime();							// Give 'em some time to do things.
 				trace = (msgHandler*)trace->getNext();	// Grab the next one.
 			}														//
+			if (claimTimer.ding()) {						// If the claim timer dings. Means it was running..
+				claimTimer.reset();							// We shut it off.
+			}
 		break;													//
 		default			:						break;		// Anything else? Basically do nothing.
 	}		
