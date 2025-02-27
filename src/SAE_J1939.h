@@ -60,13 +60,14 @@
 #define REQ_ADDR_CLAIM_PF	234	// 0xEA, PS = Destination addr.
 #define DATA_XFER_PF			235	// 0xEB, PS = 255 or Destination addr.
 #define FLOW_CON_PF			236	// 0xEC, PS = 255 or Destination addr.
-#define SEND_REQ				236	// 0xEC, PS = Destination addr.
+#define SEND_REQ				236	// 0xEC, PS = Destination addr. Doubles as peer to peer BAM message.
 #define ADDR_CLAIMED_PF		238	// 0xEE, PS = 255. Works for both (ACK) & (NACK)
 #define COMMAND_ADDR_PF		254	// PS = 216. Giving PGN of COMMAND_ADDR above.
 
 
 #define DEF_NUM_BYTES	8			// Remember data is 0..8 bytes? Most are 8 bytes. We default to that.
 #define DEF_PRIORITY		6			// Seems that 6 is the preferred default priority.
+#define DEF_TP_PRIORITY	7			// Transport protocol, multi packet messages, get this priority.
 #define DEF_R				false		// R (reserved bit) All the doc.s say to leave it as 0.
 #define DEF_DP				false		// DP (Data page) All doc.s say to leave it  as 0. But nearly ALL NMEA 2000 sets it as high order PGN bit (1).
 
@@ -85,7 +86,7 @@
 class netName;							// Forward class thing. Don't worry about it.
 class msgHandler;						// And another one. Just look the other way. Maybe hum a little.
 class netObj;							// These things seem to breed..
-
+class xferList;						// I swear it's like rats!
 
 
 
@@ -500,11 +501,10 @@ enum abortReason {
 class xferNode :	public linkListObj {
 
 	public:	
-				xferNode(netObj* inNetObj);
+				xferNode(netObj* inNetObj,xferList* inList);
 	virtual	~xferNode(void);
 	
 	virtual	void			idleTime(void)=0;
-				uint32_t		getPGNFromTPData(message* inMsg);
 				abortReason	valueToReason(byte value);
 	virtual	bool			handleMsg(message* inMsg);
 				void			startTimer(int lowMs,int hiMs);
@@ -516,6 +516,7 @@ class xferNode :	public linkListObj {
 				bool			success;			// success means that were able to assemble all the data without an error.
 				abortReason	reason;			// If we got an abort, this is the reason for it.
 				netObj*		ourNetObj;		// Pointer back to the big boss. For addresses and sending stuff.
+				xferList*	ourList;			// Pointer back to the list object we are managed by. Needed for the getPGNFromTPData() call.
 				timeObj		xFerTimer;		// For holding before sending and timeouts for receiving.
 				byte*			outData;			// Used for holding the outgoing data. For those that send stuff.
 				uint8_t		outAddr;			// The address we send everything to.
@@ -530,7 +531,7 @@ class xferNode :	public linkListObj {
 class outgoingBroadcast :	public xferNode {
 
 	public:
-				outgoingBroadcast(message* inMsg,netObj* inNetObj);
+				outgoingBroadcast(message* inMsg,netObj* inNetObj,xferList* inList);
 	virtual	~outgoingBroadcast(void);
 	
 	virtual	void	idleTime(void);
@@ -546,7 +547,7 @@ class outgoingPeerToPeer :	public xferNode {
 					waitForACK
 				};
 				
-				outgoingPeerToPeer(message* inMsg,netObj* inNetObj);
+				outgoingPeerToPeer(message* inMsg,netObj* inNetObj,xferList* inList);
 	virtual	~outgoingPeerToPeer(void);
 	
 	virtual	bool	handleMsg(message* inMsg);
@@ -559,7 +560,7 @@ class outgoingPeerToPeer :	public xferNode {
 class incomingBroadcast :	public xferNode {
 
 	public:
-				incomingBroadcast(message* inMsg,netObj* inNetObj);
+				incomingBroadcast(message* inMsg,netObj* inNetObj,xferList* inList);
 	virtual	~incomingBroadcast(void);
 	
 	virtual	bool	handleMsg(message* inMsg);
@@ -572,7 +573,7 @@ class incomingBroadcast :	public xferNode {
 class incomingPeerToPeer :	public xferNode {
 
 	public:
-				incomingPeerToPeer(message* inMsg,netObj* inNetObj);
+				incomingPeerToPeer(message* inMsg,netObj* inNetObj,xferList* inList);
 	virtual	~incomingPeerToPeer(void);
 	
 	virtual	bool	handleMsg(message* inMsg);
@@ -589,11 +590,12 @@ public:
 				xferList(void);
 	virtual	~xferList(void);
 	
-				void	begin(netObj* inNetObj);
-	virtual	void	addXfer(message* ioMsg,xferTypes xferType);
-				bool	handledMsg(message* ioMsg,bool received);
-				void	listCleanup(void);
-	virtual	void  idle(void);
+				void		begin(netObj* inNetObj);
+				uint32_t	getPGNFromTPData(message* inMsg);
+	virtual	void		addXfer(message* ioMsg,xferTypes xferType);
+				bool		handleMsg(message* ioMsg,bool received);
+				void		listCleanup(void);
+	virtual	void  	idle(void);
 	
 				netObj*	ourNetObj;
 };
