@@ -19,7 +19,7 @@ llama2000::~llama2000(void) {  }
 bool llama2000::begin(int inCSPin) {
 	
 	netName	aName;
-	
+
 	aName.setID(DEVICE_ID);									// Device ID. We make these up. You get 21 bits. (2097151 or less)
 	aName.setManufCode(MANF_CODE);						// This would be assigned to you by NMEA people.
 	aName.setECUInst(0);										// First netObj (Electronic control unit.)

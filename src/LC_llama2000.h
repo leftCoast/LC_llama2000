@@ -12,6 +12,7 @@
 #define DEF_2515_RST_PIN   8
 #define DEF_2515_INT_PIN   2
 
+
 //#define SECOND_LLAMA	// Comment out for first llama, uncomment for second llama.
 
 #ifdef SECOND_LLAMA
@@ -34,6 +35,10 @@
 
 
 
+<<<<<<< HEAD
+>>>>>>> 02e8166e2393eea19370a12bcf4435abe0b163ef
+=======
+>>>>>>> 02e8166e2393eea19370a12bcf4435abe0b163ef
 
 // ************ llama2000 ************
 
