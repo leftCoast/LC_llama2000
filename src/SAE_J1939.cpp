@@ -718,6 +718,23 @@ xferNode::xferNode(netObj* inNetObj,xferList* inList)
 // outData may have been used. If not NULL, we'll need to delete it.
 xferNode::~xferNode(void) {
 
+	/*
+	Serial.println("Transfer recycling report.");
+	Serial.print("Was I successful : ");
+	if (success)
+		Serial.println("Success");
+	else {
+		Serial.println("Fail");
+		Serial.print("With reason : ");
+		switch(reason) {
+			case notAbort			: Serial.println("notAbort");		break;
+			case busyAbort			: Serial.println("busyAbort");		break;
+			case resourceAbort	: Serial.println("resourceAbort");		break;
+			case timoutAbort		: Serial.println("timoutAbort");		break;
+			default 					: Serial.println("noReason");		break;
+		}
+	}
+	*/
 	if (outData) {			// If someone set it..
 		free(outData);		// We release it.
 		outData = NULL;	// Flag it so no one else tries to release it.
@@ -769,7 +786,7 @@ void xferNode::addMsgToQ(message* msg) {
 bool xferNode::sendDataMsg(void) {
 
 	message	dataMsg;
-	
+
 	dataMsg.setPriority(7);											// Set up the standard bits..
 	dataMsg.setR(0);													// Reserve bit.
 	dataMsg.setDP(0);													// Data page.
@@ -876,7 +893,6 @@ outgoingBroadcast::outgoingBroadcast(message* inMsg,netObj* inNetObj,xferList* i
 			if (msgSize%7) {						//	We got leftovers?
 				 msgPacks++;						// Then add one.
 			}											// (msgPack is used later.)
-			Serial.print("Sending : ");Serial.print(msgPacks);Serial.println(" message packets.");
 			outPGN = inMsg->getPGN();			// Grab off the 3 bytes of the PGN.
 			sendflowControlMsg(outPGN,BAM);	// Send BAM message.
 			startTimer(TWMIN_MS,TWMAX_MS);	// We don't send another 'till the timer dings.
@@ -1067,7 +1083,7 @@ bool incomingBroadcast::handleMsg(message* inMsg) {
 		handled = false;																			// We haven't handled the actual message. We handled a NULL one.
 		if (!complete) {																			// Sanity! NOT complete?
 			if (inMsg->getPDUf()==DATA_XFER_PF) {											// If it's a data packet..
-				if (inMsg->getPDUs()==GLOBAL_ADDR) {										// If it's a GLOBAL data packet..
+				if (inMsg->isBroadcast()) {													// If it's a broadcast data packet..
 					if (inMsg->getSourceAddr()==msg.getSourceAddr()) {					// If it's from our guy's source address..	
 						if (inMsg->getNumBytes()==8) {										// AND if it has exactly 8 bytes data..
 							if (inMsg->getDataByte(0)==packNum) {							// Ok. If this matches our desired packet num..
@@ -1091,10 +1107,10 @@ bool incomingBroadcast::handleMsg(message* inMsg) {
 					}																					//
 				}																						//
 			}																							//
-		}
-	}																								//
-	return handled;																			// Wasn't what we were looking for. Not handled.
-}	
+		}																								//
+	}																									//
+	return handled;																				// Wasn't what we were looking for. Not handled.
+}
 
 
 // If our timer ever expires we assume the sending node gave up.
@@ -1676,10 +1692,6 @@ void netObj::showAddrList(bool showNames) {
 	
 	ourAddrList.showList(showNames);
 	Serial.println();
-	//Serial.print(  "OUR Addr & name : ");
-	//Serial.println(addr);
-	//showName();
-	//Serial.println();
 }
 
 
@@ -1797,9 +1809,17 @@ void netObj::handleCantClaim(message* inMsg) { }
 // here.
 void netObj::handleComAddr(message* inMsg) {
 	
+	bool sameName;
+	
 	if (ourAddrCat==commandConfig) {								// Only commandConfig addressing can do this.
 		if (inMsg->getNumBytes()==9) {							// These messages MUST have 9 byte data sections.
-			if (sameName((netName*)inMsg->peekData())) {		// Is this message carrying our name in it? (Is it for us?)
+			sameName = true;											// Ok assuming it's the same name as us..
+			for(int i=0;i<8;i++) {									// We'll check to make sure.
+				if (name[i] != inMsg->getDataByte(i)) {		// If any bytes don't match..
+					sameName = false;									// We fail the test.
+				}															//
+			}																//
+			if (sameName) {											// Is this message carrying our name in it? (Is it for us?)
 				if (ourState==running) {							// If our state is running. The only state we COULD see it in.
 					setAddr(inMsg->getDataByte(8));				// Grab the address and plug it in.
 					sendAddressClaimed(true);						// Tell the neighborhood.
@@ -1819,17 +1839,6 @@ void netObj::startArbitTimer(void) {
 	arbitTimer.setTime(rVal * 0.6);
 }
 
-
-/*
-// Calculate and start the claim time delay. Random function.	
-void netObj::startClaimTimer(void) {
-
-	long	rVal;
-	
-	rVal = random(TWMIN_MS, TWMAX_MS);
-	claimTimer.setTime(rVal * 0.6);
-}
-*/
 
 // From whatever state we are in now, start arbitration.
 void netObj::startArbit(void) {
