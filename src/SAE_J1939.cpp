@@ -674,7 +674,8 @@ addrNode* addrList::findPair(byte inAddr,netName* inName) {
 // Let's see the list of addresses we got..
 void addrList::showList(bool withNames) {
 
-	addrNode* trace;
+	addrNode*	trace;
+	int			addr;
 	
 	Serial.println(   "----  Address list ----");
 	Serial.print("Number items : ");
@@ -682,7 +683,14 @@ void addrList::showList(bool withNames) {
 	trace = (addrNode*)getFirst();
 	while(trace) {
 		Serial.print("Address         : ");
-		Serial.println(trace->addr);
+		addr = trace->addr;
+		if (addr==GLOBAL_ADDR) {
+			Serial.println("Global address");
+		} else if (addr==NULL_ADDR) {
+			Serial.println("Null address");
+		} else {
+			Serial.println(addr);
+		}
 		if (withNames) {
 			trace->name.showName();
 			Serial.println();
