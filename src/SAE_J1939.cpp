@@ -255,7 +255,7 @@ bool message::isBroadcast(void) {
 	
 	PGN = getPGN();
 	if (PGN>=0x00F000 && PGN<=0x00FEFF) return true;	// If our PGN is between these values..
-	if (PGN>=0x00F00 && PGN<=0x00FFFF)	return true;	// Then they are known as PDU2 messages,
+	if (PGN>=0x00FF00 && PGN<=0x00FFFF)	return true;	// Then they are known as PDU2 messages,
 	if (PGN>=0x01F000 && PGN<=0x01FEFF) return true;	// and are brodcast messages.
 	if (PGN>=0x01FF00 && PGN<=0x01FFFF) return true;	//  
 	if (PDUs==GLOBAL_ADDR)					return true;	// If a PDU1 message has destination of 255? Also calling it a broadcast.
@@ -272,11 +272,17 @@ void message::showMessage(void) {
 	Serial.print("PDU format    : "); Serial.println(PDUf);
 	Serial.print("PDU specific  : "); Serial.println(PDUs);
 	Serial.print("Source addr   : "); Serial.println(sourceAddr);
-	Serial.println("Data");
+	Serial.println("Data as bytes");
 	for (int i=0;i<numBytes;i++) {
 		Serial.print("[ ");Serial.print(msgData[i]);Serial.print(" ]");Serial.print('\t');
 	}
 	Serial.println();
+	Serial.println("Data as text");
+	for (int i=0;i<numBytes;i++) {
+		Serial.print((char)(msgData[i]));
+	}
+	Serial.println();
+	
 	/*
 	for (int i=0;i<numBytes;i++) {
 		Serial.print("[ 0x");Serial.print(msgData[i],HEX);Serial.print(" ]");Serial.print('\t');
@@ -864,6 +870,8 @@ void xferNode::sendflowControlMsg(uint32_t aPGN,flowContType msgType,abortReason
 			flowContMsg.setDataByte(4,0xFF);					// There ya' go..
 		break;
 	}
+	Serial.print("Flow control PGN going out : 0x");
+	Serial.println(aPGN,HEX);
 	aByte = aPGN & 0x000000FF;									// Lets put in the PGN, all are the same. Grab LSB
 	flowContMsg.setDataByte(5,aByte);						//	Stuff it in place.
 	aPGN = aPGN >> 8;												// Slide over PGN.
@@ -872,6 +880,7 @@ void xferNode::sendflowControlMsg(uint32_t aPGN,flowContType msgType,abortReason
 	aPGN = aPGN >> 8;												// Slide over PGN.
 	aByte = aPGN & 0x000000FF;									// Grab LSB
 	flowContMsg.setDataByte(7,aByte);						// Stuff it in place. All done!
+	
 	ourNetObj->outgoingingMsg(&flowContMsg);				// Off it goes!
 }
 
@@ -944,7 +953,7 @@ outgoingPeerToPeer::outgoingPeerToPeer(message* inMsg,netObj* inNetObj,xferList*
 	: xferNode(inNetObj,inList) {
 
 	uint32_t	outPGN;
-	
+	Serial.println("peer to peer outgoing");
 	if (inMsg && inNetObj) {								// As always check sanity..
 		msgSize = inMsg->getNumBytes();					// Save off the size. Just in case..
 		if (msgSize>8) {										// If its's too big..
@@ -954,8 +963,10 @@ outgoingPeerToPeer::outgoingPeerToPeer(message* inMsg,netObj* inNetObj,xferList*
 				if (msgSize%7) {								//	We got leftovers?
 					 msgPacks++;								// Then add one.
 				}													// 
-				outAddr = ourNetObj->getAddr();			// Peer to peer from us.
+				outAddr = inMsg->getPDUs();				// Peer to peer to.. 
 				outPGN = inMsg->getPGN();					// Grab off the PGN.
+				Serial.print("Outgoing PGN : 0x");
+				Serial.println(outPGN,HEX);
 				sendflowControlMsg(outPGN,reqToSend);	// Send reqToSend message.					
 				ourState = waitToSend;						// We don't send another 'till they say it's ok.							
 				xFerTimer.setTime(TR_MS,true);			// We allow this much time for a clear to send to come in.
@@ -969,6 +980,7 @@ outgoingPeerToPeer::outgoingPeerToPeer(message* inMsg,netObj* inNetObj,xferList*
 // If we grabbed the data buffer? We'll deal with it here..	
 outgoingPeerToPeer::~outgoingPeerToPeer(void) {
 
+	Serial.println(success);
 	if (outData) {			// If outData is non NULL. (We used it.)
 		free(outData);		// Recycle the RAM.
 		outData = NULL;	// Flag it as recycled so no one else tries to free it.
@@ -987,9 +999,13 @@ bool outgoingPeerToPeer::handleMsg(message* inMsg) {
 	if (inMsg) {																	// Sanity, we don't want to call on nothing.
 		handled = false;															// See? we stop the NULL messages.
 		if (inMsg->getPDUf()==FLOW_CON_PF) {								// If we got a flow control message..
+			Serial.print("handleMsg() flow control incoming address : ");
+			Serial.println(inMsg->getPDUs());
 			if (inMsg->getPDUs()==ourNetObj->getAddr()) {				// And it it's for us? How exiting!
+				
 				switch(inMsg->getDataByte(0)) {								// Lets take a look at the control byte..
 					case  clearToSend	:											// We got a clear to send message.			
+						Serial.println("got clear to send");
 						if (ourState==waitToSend) {							// If we were waiting for a clear to send..
 							if (inMsg->getDataByte(1)==0) {					// If flagged "Need more time"..
 								xFerTimer.setTime(TH_MS,true);				// Bump up the allowed time to this much. For clear or ACK.
@@ -1014,6 +1030,7 @@ bool outgoingPeerToPeer::handleMsg(message* inMsg) {
 						handled =  true;											// And we handled this message.																
 					break;															// Still here? Let's go!
 					case  endOfMsg		:											// We got a end of message received message.
+						Serial.println("got end of message");
 						if (ourState==waitForACK) {							// If we were waiting for such a message..
 							success = true;										// Then we are completely done! And successful!
 						}																//
@@ -1021,16 +1038,21 @@ bool outgoingPeerToPeer::handleMsg(message* inMsg) {
 						handled =  true;											// And we handled this message.
 					break;															// Well, it matches the pattern.
 					case  abortMsg		:											// Got an abort?!
+						Serial.println("got abort");
 						reason = valueToReason(inMsg->getDataByte(1));	// Ask them why?
 						complete = true;											// In every case we are completely done.
 						handled =  true;											// And we handled this message.
 					break;
 					default				:
+						Serial.println("got nonsense.");
 						reason = notAbort;										// We didn't get an abort. We got nonsense.
 						complete = true;											// In every case we are completely done.
 						handled =  true;											// And we handled this message.																
 					break;															// Still here? Let's go!
 				}
+			} else {
+				Serial.print("Wrong address? 0x");
+				Serial.println(inMsg->getPDUs(),HEX);
 			}
 		}
 	}
@@ -1142,16 +1164,17 @@ incomingPeerToPeer::incomingPeerToPeer(message* inMsg,netObj* inNetObj,xferList*
 	
 	uint32_t	msgPGN;	
 	
-	if (!inMsg || !inNetObj) {															// If we're getting NULL inputs? Don't bother.
-		complete = true;																	// We're giving up in the face of overwhelming odds.
-		reason = notAbort;																// Reason is : Somethings really messed up!
-		return;																				// Return and let this poor thing be recycled.	
-	}																							//
-	if (inMsg->getPDUf()==SEND_REQ) {												// Peer to peer, we only have the PDUf to go on.
-		if (inMsg->getPDUs()==inNetObj->getAddr()) {								// It's ours.
+	if (!inMsg || !inNetObj) {																// If we're getting NULL inputs? Don't bother.
+		complete = true;																		// We're giving up in the face of overwhelming odds.
+		reason = notAbort;																	// Reason is : Somethings really messed up!
+		return;																					// Return and let this poor thing be recycled.	
+	}																								//
+	if (inMsg->getPDUf()==SEND_REQ) {													// Peer to peer, we only have the PDUf to go on.
+		if (inMsg->getPDUs()==inNetObj->getAddr()) {									// It's ours.
 			msgSize	= pack16(inMsg->getDataByte(2),inMsg->getDataByte(1));	// Grab the number of bytes.
 			msg.setNumBytes(msgSize);														// Try to set the message buffer size..
-			msgPGN = ourList->getPGNFromTPData(inMsg);											// Grab PGN from the incoming TP data block.
+			outAddr = inMsg->getSourceAddr();											// Grab return addr.
+			msgPGN = ourList->getPGNFromTPData(inMsg);								// Grab PGN from the incoming TP data block.
 			if (msg.getNumBytes()==msgSize) {											// If we got the RAM..
 				msgPacks = inMsg->getDataByte(3);										// Grab the number of packets.
 				msg.setPGN(msgPGN);															// Use this on the message.
@@ -1303,6 +1326,72 @@ void xferList::addXfer(message* ioMsg,xferTypes xferType) {
 }
 
 
+
+bool xferList::checkList(message* ioMsg) {
+
+	bool			handled;
+	xferNode*	trace;
+	
+	handled = false;													// Assume we don't handle this.
+	trace = (xferNode*)getFirst();								// Grab first handler node from the list.
+	while(trace && !handled) {										// While we have non NULL node. AND message has not been handled..
+		handled = trace->handleMsg(ioMsg);						// Ask each node if they want/need to handle this message.
+		trace = (xferNode*)trace->getNext();					// Then grab the next node regardless of the answer.
+	}
+	return handled;
+}	
+
+// Ok, a message has come in from either the net, OR, we wrote it. It could be a start of
+// a transfer we need to deal with. It could be part of a message we are already dealing
+// with. Most likely it's nothing that concerns us. But, we get first right of refusal. So
+// lets have a look at it.
+bool xferList::handleMsg(message* ioMsg,bool received) {
+
+	
+	bool			handled;
+	uint32_t		PGN;
+	message		tempMsg;
+	
+	handled = false;															// Assume we don't handle this.
+	if (ioMsg && ourNetObj) {												// Sanity first, is it not NULL? Is netObj not NULL?
+		if (received) {														// If its from the net..
+			if (ioMsg->getPDUf()==FLOW_CON_PF) {						// If we have an incoming BAM message..
+				PGN = getPGNFromTPData(ioMsg);							// Lets see what this BAM is all about. Could be broadcast or peer to peer.
+				tempMsg.setPGN(PGN);											// Drop this PGN into our temp message so we can..
+				if (tempMsg.isBroadcast()) {								// See if the multi packet message will be a broadcast..
+					addXfer(ioMsg,broadcastIn);							// Setup a brodcast transfer.
+					handled = true;											//	And this message has been handled!
+				} else {															// Else, it's peer to peer..
+					if (tempMsg.getPDUs()==ourNetObj->getAddr()) {	// Using tempMsg, see if it's actually to us..
+						addXfer(ioMsg,peerToPeerIn);						// Setup an incoming brodcast transfer.
+						handled = true;										// We handled it.
+					}																//
+				}																	//
+			} else {																// Else it's not a BAM, so..
+				handled = checkList(ioMsg);								// See if anyone is looking for this.
+			}																		// 
+		} else {																	// Else we just wrote this? Yeech!
+			if (ioMsg->getNumBytes()>8) {									// If message is oversized..
+				Serial.println("incoming has more than 8 bytes");
+				Serial.print("And has PGN of : 0x");
+				Serial.println(ioMsg->getPGN(),HEX);
+				if (ioMsg->isBroadcast()) {								// If the message itself is a broadcast..
+					Serial.println("broadcast");
+					addXfer(ioMsg,broadcastOut);							// Setup a multi packet brodcast transfer.
+				} else {															// Else it's NOT a broadcast..
+					Serial.println("It's a peer to peer");
+					addXfer(ioMsg,peerToPeerOut);							// Set up a multi packet peer to peer transfer.
+				}																	//
+				handled = true;												// In any case, it's been handled.
+			}																		//
+		}																			// 
+	}																				//
+	return handled;															// Return the final result.
+}
+
+
+
+/*
 // Ok, a message has come in from either the net, OR, we wrote it. It could be a start of
 // a transfer we need to deal with. It could be part of a message we are already dealing
 // with. Most likely it's nothing that concerns us. But, we get first right of refusal. So
@@ -1332,9 +1421,14 @@ bool  xferList::handleMsg(message* ioMsg,bool received) {
 			}																		//
 		} else {																	// Else we wrote it? Yeech!
 			if (ioMsg->getNumBytes()>8) {									// If message is oversized..
+				Serial.println("incoming has more than 8 bytes");
+				Serial.print("And has PGN of : 0x");
+				Serial.println(ioMsg->getPGN(),HEX);
 				if (ioMsg->isBroadcast()) {								// If the message itself is a broadcast..
+					Serial.println("broadcast");
 					addXfer(ioMsg,broadcastOut);							// Setup a multi packet brodcast transfer.
 				} else {															// Else it's NOT a broadcast..
+					Serial.println("It's a peer to peer");
 					addXfer(ioMsg,peerToPeerOut);							// Set up a multi packet peer to peer transfer.
 				}																	//
 				handled = true;												// In any case, it's been handled.
@@ -1350,7 +1444,7 @@ bool  xferList::handleMsg(message* ioMsg,bool received) {
 	}																				//
 	return handled;															// Return the final result.
 }
-
+*/
 
 // Basic garbage collection. Any transfer message nodes completed get marked as complete
 // and need to be recycled. Actually we only need to kill off one. This will be called

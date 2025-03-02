@@ -593,6 +593,7 @@ public:
 				void		begin(netObj* inNetObj);
 				uint32_t	getPGNFromTPData(message* inMsg);
 	virtual	void		addXfer(message* ioMsg,xferTypes xferType);
+				bool		checkList(message* ioMsg);
 				bool		handleMsg(message* ioMsg,bool received);
 				void		listCleanup(void);
 	virtual	void  	idle(void);
