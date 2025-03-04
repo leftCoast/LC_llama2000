@@ -849,7 +849,6 @@ void xferNode::getXferPGN(message* initMsg) {
 			tempMsg.setPDUs(initMsg->getSourceAddr());		// This is a lazy way to do that.
 			xferPGN = tempMsg.getPGN();							// Should be all patched up now.
 		} else {															// Else its NOT a flow control. Assume it's from us.
-			initMsg->showMessage();
 			xferPGN = initMsg->getPGN();							// Messages know how to do this for themselves.
 		}
 		aPGN	= xferPGN;												// Copy the PGN, this is going to tear things apart..
