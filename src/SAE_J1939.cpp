@@ -1439,6 +1439,61 @@ bool xferList::checkList(message* ioMsg) {
 	return handled;
 }	
 
+
+
+// Ok, a message has come in from either the net, OR, we wrote it. It could be a start of
+// a transfer we need to deal with. It could be part of a message we are already dealing
+// with. Most likely it's nothing that concerns us. But, we get first right of refusal. So
+// lets have a look at it.
+bool xferList::handleMsg(message* ioMsg,bool received) {
+
+	
+	bool			handled;
+	message		tempMsg;
+	uint32_t		PGN;
+	
+	handled = false;																		// Ain't handled nuthin' yet.
+	if (ioMsg) {																			// Sanity, check we got something.
+		if (received) {																	// From the network!
+			if (ioMsg->getPDUf()==FLOW_CON_PF) {									// If it's an incoming TP message..
+				switch((int)ioMsg->getDataByte(0)) {
+					case reqToSend		:
+						PGN = getPGNFromTPData(ioMsg);								// Lets see what this TP is all about.
+						tempMsg.setPGN(PGN);												// Drop this PGN into our temp message so we can..
+						if (!tempMsg.isBroadcast()) {									// See if the multi packet message is peer to peer..
+							if (tempMsg.getPDUs()==ourNetObj->addr) {				// And it's to us.
+								addXfer(ioMsg,peerToPeerIn);							// Setup a brodcast transfer.
+								handled = true;											//	This message has been handled!
+							}																	//
+						}																		// 	
+					break;																	//
+					case clearToSend	: handled = checkList(ioMsg); break;	// Hand it to the list, done.
+					case endOfMsg		: handled = checkList(ioMsg); break;	// Hand it to the list, done.
+					case BAM				: 													// BAM is for broadcast messages.
+						PGN = getPGNFromTPData(ioMsg);								// Lets see what this TP is all about.
+						tempMsg.setPGN(PGN);												// Drop this PGN into our temp message so we can..
+						if (tempMsg.isBroadcast()) {									// See if the multi packet message actually is a broadcast..
+							addXfer(ioMsg,broadcastIn);								// Setup a brodcast transfer.
+							handled = true;												//	And this message has been handled!
+						}																		//
+					break;																	//
+					case abortMsg		: handled = checkList(ioMsg); break;	// Hand it to the list, done.
+				}																				//
+			}																					//
+		} else if (ioMsg->getNumBytes()>8) {										// Else if WE wrote an oversized message..
+			if (ioMsg->isBroadcast()) {												// If the message itself is a broadcast..
+				addXfer(ioMsg,broadcastOut);											// Setup a multi packet brodcast transfer.
+			} else {																			// Else it's NOT a broadcast..
+				addXfer(ioMsg,peerToPeerOut);											// Set up a multi packet peer to peer transfer.
+			}																					//
+			handled = true;																// In any case, it's been handled.
+		}																						//		
+	}																							//
+	return handled;																		// And we return our result.
+}
+
+
+/*
 // Ok, a message has come in from either the net, OR, we wrote it. It could be a start of
 // a transfer we need to deal with. It could be part of a message we are already dealing
 // with. Most likely it's nothing that concerns us. But, we get first right of refusal. So
@@ -1453,10 +1508,11 @@ bool xferList::handleMsg(message* ioMsg,bool received) {
 	handled = false;															// Assume we don't handle this.
 	if (ioMsg && ourNetObj) {												// Sanity first, is it not NULL? Is netObj not NULL?
 		if (received) {														// If its from the net..
-			if (ioMsg->getPDUf()==FLOW_CON_PF) {						// If we have an incoming BAM message..
-				Serial.print("Incoming BAM has PDUs of :");
+			if (ioMsg->getPDUf()==FLOW_CON_PF) {						// If we have an incoming TP message..
+				Serial.print("Incoming TP msg has PDUs of :");
 				Serial.println(ioMsg->getPDUs());
-				PGN = getPGNFromTPData(ioMsg);							// Lets see what this BAM is all about. Could be broadcast or peer to peer.
+				
+				PGN = getPGNFromTPData(ioMsg);							// Lets see what this TP is all about. Could be broadcast or peer to peer.
 				tempMsg.setPGN(PGN);											// Drop this PGN into our temp message so we can..
 				Serial.print("temp has PGN from data. PDUs is :");
 				Serial.println(tempMsg.getPDUs());
@@ -1490,7 +1546,7 @@ bool xferList::handleMsg(message* ioMsg,bool received) {
 	}																				//
 	return handled;															// Return the final result.
 }
-
+*/
 
 // Basic garbage collection. Any transfer message nodes completed get marked as complete
 // and need to be recycled. Actually we only need to kill off one. This will be called
