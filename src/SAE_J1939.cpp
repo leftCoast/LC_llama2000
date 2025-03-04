@@ -288,18 +288,16 @@ void message::showMessage(void) {
 		Serial.print("[ ");Serial.print(msgData[i]);Serial.print(" ]");Serial.print('\t');
 	}
 	Serial.println();
+	Serial.println("Data as hex");
+	for (int i=0;i<numBytes;i++) {
+		Serial.print("[ 0x");Serial.print(msgData[i],HEX);Serial.print(" ]");Serial.print('\t');
+	}
+	Serial.println();
 	Serial.println("Data as text");
 	for (int i=0;i<numBytes;i++) {
 		Serial.print((char)(msgData[i]));
 	}
 	Serial.println();
-	
-	/*
-	for (int i=0;i<numBytes;i++) {
-		Serial.print("[ 0x");Serial.print(msgData[i],HEX);Serial.print(" ]");Serial.print('\t');
-	}
-	Serial.println();
-	*/
 }
 
 
@@ -842,11 +840,16 @@ bool xferNode::sendDataMsg(void) {
 void xferNode::getXferPGN(message* initMsg) {
 
 	uint32_t	aPGN;
+	message	tempMsg;
 	
 	if (initMsg) {														// Sanity, we actually got one.
 		if (initMsg->getPDUf()==FLOW_CON_PF) {					// Ok, it's flow control. We can grab it from here.
 			xferPGN = ourList->getPGNFromTPData(initMsg);	// We have this handy function for that.
+			tempMsg.setPGN(xferPGN);								// We need to patch this for replying.
+			tempMsg.setPDUs(initMsg->getSourceAddr());		// This is a lazy way to do that.
+			xferPGN = tempMsg.getPGN();							// Should be all patched up now.
 		} else {															// Else its NOT a flow control. Assume it's from us.
+			initMsg->showMessage();
 			xferPGN = initMsg->getPGN();							// Messages know how to do this for themselves.
 		}
 		aPGN	= xferPGN;												// Copy the PGN, this is going to tear things apart..
@@ -870,8 +873,6 @@ void xferNode::sendflowControlMsg(flowContType msgType,abortReason reason) {
 	uint16_t	aWord;
 	uint8_t	aByte;
 	
-	Serial.print("numBytes : ");
-	Serial.println(flowContMsg.getNumBytes());
 	flowContMsg.setPriority(7);								// Set up the standard bits..
 	flowContMsg.setR(0);											// Reserve bit.
 	flowContMsg.setDP(0);										// Data page.
@@ -882,6 +883,7 @@ void xferNode::sendflowControlMsg(flowContType msgType,abortReason reason) {
 	switch(msgType) {
 		case BAM				:										// If broadcast. outAddr == 255. Or.. 
 		case reqToSend		:										// If peer to peer. outAddr != 255.
+			Serial.println("Sending BAM");
 			aWord = msgSize;										// Next two are the number of bytes to come.
 			aByte = aWord & 0x00FF;								// Low order byte.
 			flowContMsg.setDataByte(1,aByte);				// Set it into data index 1.
@@ -892,12 +894,14 @@ void xferNode::sendflowControlMsg(flowContType msgType,abortReason reason) {
 			flowContMsg.setDataByte(4,0xFF);					// See BYTE 4 note below.
 		break;						
 		case clearToSend	:
+			Serial.println("Sending clearToSend");
 			flowContMsg.setDataByte(1,msgPacks);			// Set in num message packets.
 			flowContMsg.setDataByte(2,packNum);				// The expected packet number. (base 1)
 			flowContMsg.setDataByte(3,0xFF);					// Fill with 0xFF. Ok..
 			flowContMsg.setDataByte(4,0xFF);					// Same here.
 		break;	
 		case endOfMsg		:
+			Serial.println("Sending endOfMsg");
 			aWord = msgSize;										// Next two are the number of bytes to come.
 			aByte = aWord & 0x00FF;								// Low order byte.
 			flowContMsg.setDataByte(1,aByte);				// Set it into data index 1.
@@ -908,6 +912,7 @@ void xferNode::sendflowControlMsg(flowContType msgType,abortReason reason) {
 			flowContMsg.setDataByte(4,0xFF);					// Fill with 0xFF. Ok..
 		break;	
 		case abortMsg		:
+			Serial.println("Sending abortMsg");
 			aByte = (int)reason;									// Read the abort reason as an integer.
 			flowContMsg.setDataByte(1,aByte);				// Wants the abort reason.
 			flowContMsg.setDataByte(2,0xFF);					// Fill with 0xFF. Ok..
@@ -918,6 +923,8 @@ void xferNode::sendflowControlMsg(flowContType msgType,abortReason reason) {
 	flowContMsg.setDataByte(5,byte5);						//	Stuff pre-calculated PGN bytes in place.
 	flowContMsg.setDataByte(6,byte6);						// 
 	flowContMsg.setDataByte(7,byte7);						//
+	Serial.println("Flow control is sending this..");
+	flowContMsg.showMessage();
 	ourNetObj->outgoingingMsg(&flowContMsg);				// Off it goes!
 }
 
@@ -996,13 +1003,16 @@ outgoingPeerToPeer::outgoingPeerToPeer(message* inMsg,netObj* inNetObj,xferList*
 		msgSize = inMsg->getNumBytes();					// Save off the size. Just in case..
 		if (msgSize>8) {										// If its's too big..
 			if (!inMsg->isBroadcast()) {					// If it's NOT to everyone.. (Peer to peer)
+				Serial.println("Calling getXferPGN() on initial message.");
 				getXferPGN(inMsg);							// Save off the PGN for later.
 				msgData = inMsg->passData();				// Hand over the actual data to us. (messages can do this, very scary.)
 				msgPacks = msgSize/7;						// Seven goes into num bytes?.
 				if (msgSize%7) {								//	We got leftovers?
 					 msgPacks++;								// Then add one.
 				}													// 
-				msgAddr = inMsg->getSourceAddr();		// Peer to peer to.. 
+				msgAddr = inMsg->getPDUs();				// Peer to peer to.. 
+				Serial.print("msgAddr is set to : ");
+				Serial.println(msgAddr);
 				sendflowControlMsg(reqToSend);			// Send a reqToSend message.					
 				ourState = waitToSend;						// We don't send another 'till they say it's ok.							
 				xFerTimer.setTime(TR_MS,true);			// We allow this much time for a clear to send to come in.
@@ -1028,14 +1038,23 @@ outgoingPeerToPeer::~outgoingPeerToPeer(void) {
 // things to go wrong!
 bool outgoingPeerToPeer::isOurMsg(message* inMsg) {
 
+	Serial.println("Sanity checking incoming message.");
 	if (!complete) {																// We're still running.
+		Serial.println("running.");
 		if (inMsg) {																// We don't handle null messages.
+			Serial.println("Non NULL.");
 			if (inMsg->getPDUf()==FLOW_CON_PF) {							// Only interested in flow control messages.
+				Serial.println("Is FLOW_CON_PF.");
 				if (inMsg->getPDUs()==ourNetObj->getAddr()) {			// Having our address.
+					Serial.println("PDUs is us.");
 					if (xferPGN==ourList->getPGNFromTPData(inMsg)) {	// And matching our transfer PGN.
+						Serial.println("PGN in data matches.");
 						return true;												// In this case? Yeah, it's ours.
 					}
 				}
+			} else {
+				Serial.print("PUDf fails with : ");
+				Serial.println(inMsg->getPDUf());
 			}
 		}
 	}
@@ -1056,6 +1075,7 @@ bool outgoingPeerToPeer::handleMsg(message* inMsg) {
 	if (isOurMsg(inMsg)) {												// Lets see if it's real and one we need to deal with.
 		switch(inMsg->getDataByte(0)) {								// Lets take a look at the control byte..
 			case  clearToSend	:											// We got a clear to send message.
+				Serial.println("Got clearToSend");
 				if (ourState==waitToSend) {							// If we were waiting for a clear to send..
 					if (inMsg->getDataByte(1)==0) {					// If flagged "Need more time"..
 						xFerTimer.setTime(TH_MS,true);				// Bump up the allowed time to this much. For clear or ACK.
@@ -1077,16 +1097,19 @@ bool outgoingPeerToPeer::handleMsg(message* inMsg) {
 				}																//
 			break;															// That should cover all those cases.
 			case  endOfMsg		:											// We got an end of message.
+				Serial.println("Got endOfMsg");
 				if (ourState==waitForACK) {							// If we were waiting for such a message..
 					success = true;										// Then we are successful!
 				}																//
 				complete = true;											// In every case we are completely done.
 			break;															// And that's it.
 			case  abortMsg		:											// Got an abort?!
+				Serial.println("Got abortMsg");
 				complete = true;											// In every case we are done.
 				reason = valueToReason(inMsg->getDataByte(1));	// Ask them why?
 			break;															// Sigh, we failed.
 			default				:											// If we hit a default we are seriously messed up.
+				Serial.println("Got umm.. something else?");
 				complete = true;											// In every other case we are done.
 				reason = notAbort;										// We didn't get an abort. We got nonsense.
 			break;															// Maybe we should take up knitting?
@@ -1217,7 +1240,9 @@ incomingPeerToPeer::incomingPeerToPeer(message* inMsg,netObj* inNetObj,xferList*
 	
 	if (inMsg) {																					// Quick sanity.
 		if (inMsg->getPDUf()==SEND_REQ) {													// Peer to peer, we only have the PDUf to go on.
+			Serial.println("Got SEND_REQ");
 			if (inMsg->getPDUs()==inNetObj->getAddr()) {									// It's ours.
+				Serial.println("It's ours");
 				msgSize	= pack16(inMsg->getDataByte(2),inMsg->getDataByte(1));	// Grab the number of bytes.
 				if (resizeBuff(msgSize,&msgData)) {											// See if we can get the RAM.
 					getXferPGN(inMsg);															// Grab PGN to be used later.
@@ -1231,6 +1256,9 @@ incomingPeerToPeer::incomingPeerToPeer(message* inMsg,netObj* inNetObj,xferList*
 					reason = resourceAbort;														// Note we ran outta' RAM.
 					complete = true;																// And tell 'em to dump us off the list. Ain't going to work.
 				}
+			} else {
+				Serial.print("PDUs is actually  ");
+				Serial.println(inMsg->getPDUs());
 			}
 		}
 	}
@@ -1426,8 +1454,12 @@ bool xferList::handleMsg(message* ioMsg,bool received) {
 	if (ioMsg && ourNetObj) {												// Sanity first, is it not NULL? Is netObj not NULL?
 		if (received) {														// If its from the net..
 			if (ioMsg->getPDUf()==FLOW_CON_PF) {						// If we have an incoming BAM message..
+				Serial.print("Incoming BAM has PDUs of :");
+				Serial.println(ioMsg->getPDUs());
 				PGN = getPGNFromTPData(ioMsg);							// Lets see what this BAM is all about. Could be broadcast or peer to peer.
 				tempMsg.setPGN(PGN);											// Drop this PGN into our temp message so we can..
+				Serial.print("temp has PGN from data. PDUs is :");
+				Serial.println(tempMsg.getPDUs());
 				if (tempMsg.isBroadcast()) {								// See if the multi packet message will be a broadcast..
 					addXfer(ioMsg,broadcastIn);							// Setup a brodcast transfer.
 					handled = true;											//	And this message has been handled!
