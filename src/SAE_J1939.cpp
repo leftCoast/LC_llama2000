@@ -213,7 +213,7 @@ byte* message::peekData(void) { return msgData; }
 
 // Ok, this one passes the pointer to our data buffer to SOMEONE ELSE TO OWN. We give up
 // ownership to it completely. This is used for multi packet transfers. We are basically
-// pulled apart and our data is used to form a multi packet dats stream for trasmission.
+// pulled apart and our data is used to form a multi packet datas stream for trasmission.
 // Really, it doesn't hurt, much.
 byte* message::passData(void) {
 
@@ -223,6 +223,17 @@ byte* message::passData(void) {
 	msgData = NULL;		// NULL out our pointer to it.
 	numBytes = 0;			// zero out our amount of data.
 	return dataPtr;		// Pass the buffer on to whomever is to take it.
+}
+
+
+// Someone built up some massive data buffer for us to hold. Recycle ours and grab theirs.
+// We take ownership of it. Yes, this is scary but it does skip the doubling RAM footprint
+// thing.
+void message::acceptData(byte* inData,int inNumBytes) {
+
+	setNumBytes(0);			// We recycle ours.
+	msgData = inData;			// We point at theirs.
+	numBytes = inNumBytes;	// And we patch our size to what we are TOLD is theirs.
 }
 
 
@@ -723,7 +734,7 @@ xferNode::xferNode(netObj* inNetObj,xferList* inList)
 	complete		= true;		// Let the offspring set this.
 	ourNetObj	= inNetObj;	// Save off our netObj pointer.
 	ourList		= inList;	// Save our list manager thingy.
-	outData		= NULL;		// Start all pointers we may allocate to NULL
+	msgData		= NULL;		// Start all pointers we may allocate to NULL
 	byteTotal	= 0;			// None been sent. yet..
 	packNum		= 1;			// The packet ID we'll be sending/expecting.
 }
@@ -749,9 +760,9 @@ xferNode::~xferNode(void) {
 		}
 	}
 	*/
-	if (outData) {			// If someone set it..
-		free(outData);		// We release it.
-		outData = NULL;	// Flag it so no one else tries to release it.
+	if (msgData) {			// If someone set it..
+		free(msgData);		// We release it.
+		msgData = NULL;	// Flag it so no one else tries to release it.
 	}
 }
 
@@ -768,6 +779,10 @@ abortReason	xferNode::valueToReason(byte value) {
 		default 					: return noReason;
 	}
 }
+
+
+// We get in a message, let us see if it is one sent specifically to us. We default to not ours.
+bool xferNode::isOurMsg(message* inMsg) { return false; }
 
 
 // If no one is listenting? Then pass back false.
@@ -801,18 +816,18 @@ bool xferNode::sendDataMsg(void) {
 
 	message	dataMsg;
 
-	dataMsg.setPriority(7);											// Set up the standard bits..
+	dataMsg.setPriority(DEF_TP_PRIORITY);						// Set up the standard bits..
 	dataMsg.setR(0);													// Reserve bit.
 	dataMsg.setDP(0);													// Data page.
 	dataMsg.setPDUf(DATA_XFER_PF);								// Data xFer message.
-	dataMsg.setPDUs(outAddr);										// Broadcasting or peer to peer.
+	dataMsg.setPDUs(msgAddr);										// Broadcasting or peer to peer.
 	dataMsg.setSourceAddr(ourNetObj->getAddr());				// From us.
 	dataMsg.setDataByte(0,packNum++);							// Data packet ID.
 	for(int i=1;i<8;i++) {											// For each byte..
 		if (byteTotal>msgSize) {									// If we've run out of data..
 			dataMsg.setDataByte(i,0xFF);							// Data byte is flagged as 255.
 		} else {															// Else, we have data to send.
-			dataMsg.setDataByte(i,outData[byteTotal++]);		// Write the data byte.
+			dataMsg.setDataByte(i,msgData[byteTotal++]);		// Write the data byte.
 		}																	//
 	}																		//
 	ourNetObj->outgoingingMsg(&dataMsg);						// And its on it's way!
@@ -820,18 +835,48 @@ bool xferNode::sendDataMsg(void) {
 }
 
 
+// We are either sending a oversize message or receiving one. In either case, there is an
+// initial message that starts all of this. Either and oversized message we are sending or
+// some sort of BAM message we are receiving. Lets use this and get the PGN so we can use
+// it later. We'll need it.
+void xferNode::getXferPGN(message* initMsg) {
+
+	uint32_t	aPGN;
+	
+	if (initMsg) {														// Sanity, we actually got one.
+		if (initMsg->getPDUf()==FLOW_CON_PF) {					// Ok, it's flow control. We can grab it from here.
+			xferPGN = ourList->getPGNFromTPData(initMsg);	// We have this handy function for that.
+		} else {															// Else its NOT a flow control. Assume it's from us.
+			xferPGN = initMsg->getPGN();							// Messages know how to do this for themselves.
+		}
+		aPGN	= xferPGN;												// Copy the PGN, this is going to tear things apart..
+		byte5	= aPGN & 0x000000FF;								// Lets put in the PGN, all are the same. Grab LSB
+		aPGN	= aPGN >> 8;												// Slide over PGN.
+		byte6	= aPGN & 0x000000FF;									// Grab LSB
+		aPGN	= aPGN >> 8;												// Slide over PGN.
+		byte7	= aPGN & 0x000000FF;									// Grab LSB
+	} else {																// Else? We're getting nutty parameters. Pull the plug.
+		success = false;												// This is NOT a success.
+		complete = true;												// We're done.
+		reason = noReason;											// We don't have a reason for the powers-that-be going bananas.
+	}
+}
+
+
 // Send flowControl message.
-void xferNode::sendflowControlMsg(uint32_t aPGN,flowContType msgType,abortReason reason) {
+void xferNode::sendflowControlMsg(flowContType msgType,abortReason reason) {
 
 	message	flowContMsg;
 	uint16_t	aWord;
 	uint8_t	aByte;
 	
+	Serial.print("numBytes : ");
+	Serial.println(flowContMsg.getNumBytes());
 	flowContMsg.setPriority(7);								// Set up the standard bits..
 	flowContMsg.setR(0);											// Reserve bit.
 	flowContMsg.setDP(0);										// Data page.
 	flowContMsg.setPDUf(FLOW_CON_PF);						// Yes, an FC message.
-	flowContMsg.setPDUs(outAddr);								// FCs are for doing peer to peer. OR.. BAM messages.
+	flowContMsg.setPDUs(msgAddr);								// FCs are for doing peer to peer. OR.. BAM messages.
 	flowContMsg.setSourceAddr(ourNetObj->getAddr());	// From us.
 	flowContMsg.setDataByte(0,(int)msgType);				// Data section, first is a constant.
 	switch(msgType) {
@@ -870,17 +915,9 @@ void xferNode::sendflowControlMsg(uint32_t aPGN,flowContType msgType,abortReason
 			flowContMsg.setDataByte(4,0xFF);					// There ya' go..
 		break;
 	}
-	Serial.print("Flow control PGN going out : 0x");
-	Serial.println(aPGN,HEX);
-	aByte = aPGN & 0x000000FF;									// Lets put in the PGN, all are the same. Grab LSB
-	flowContMsg.setDataByte(5,aByte);						//	Stuff it in place.
-	aPGN = aPGN >> 8;												// Slide over PGN.
-	aByte = aPGN & 0x000000FF;									// Grab LSB
-	flowContMsg.setDataByte(6,aByte);						// Stuff it in place.
-	aPGN = aPGN >> 8;												// Slide over PGN.
-	aByte = aPGN & 0x000000FF;									// Grab LSB
-	flowContMsg.setDataByte(7,aByte);						// Stuff it in place. All done!
-	
+	flowContMsg.setDataByte(5,byte5);						//	Stuff pre-calculated PGN bytes in place.
+	flowContMsg.setDataByte(6,byte6);						// 
+	flowContMsg.setDataByte(7,byte7);						//
 	ourNetObj->outgoingingMsg(&flowContMsg);				// Off it goes!
 }
 
@@ -900,18 +937,19 @@ void xferNode::sendflowControlMsg(uint32_t aPGN,flowContType msgType,abortReason
 outgoingBroadcast::outgoingBroadcast(message* inMsg,netObj* inNetObj,xferList* inList)
 	: xferNode(inNetObj,inList) {
 	
-	uint32_t	outPGN;
-
-	if (inMsg && inNetObj) {					// As always, check sanity..
+	success = false;								// We assume this will fail. Such a bad attitude.
+	complete = true;								// We are done.
+	reason = noReason;							// And it's because WE did something wrong.
+	if (inMsg && inNetObj) {					// OK. As always, check sanity..
 		msgSize = inMsg->getNumBytes();		// Save off the size. (used later)
 		if (msgSize>8) {							// If its's too big..
-			outData = inMsg->passData();		// Hands over the actual data to us.
+			getXferPGN(inMsg);					// Save off the PGN for later.
+			msgData = inMsg->passData();		// Hands over the actual data to us. (Yes messages can do this.)
 			msgPacks = msgSize/7;				// Seven goes into num bytes.?.
 			if (msgSize%7) {						//	We got leftovers?
 				 msgPacks++;						// Then add one.
 			}											// (msgPack is used later.)
-			outPGN = inMsg->getPGN();			// Grab off the 3 bytes of the PGN.
-			sendflowControlMsg(outPGN,BAM);	// Send BAM message.
+			sendflowControlMsg(BAM);			// Send a BAM message.
 			startTimer(TWMIN_MS,TWMAX_MS);	// We don't send another 'till the timer dings.
 			complete = false;						// Successfully started. So, not complete.
 		}
@@ -922,9 +960,9 @@ outgoingBroadcast::outgoingBroadcast(message* inMsg,netObj* inNetObj,xferList* i
 // If we grabbed the data buffer? We'll deal with it here..	
 outgoingBroadcast::~outgoingBroadcast(void) {
 
-	if (outData) {			// If outData is non NULL. (We used it.)
-		free(outData);		// Recycle the RAM.
-		outData = NULL;	// Flag it as recycled so no one else tries to free it.
+	if (msgData) {			// If msgData is non NULL. (We used it.)
+		free(msgData);		// Recycle the RAM.
+		msgData = NULL;	// Flag it as recycled so no one else tries to free it.
 	}
 }
 
@@ -952,27 +990,25 @@ void outgoingBroadcast::idleTime(void) {
 outgoingPeerToPeer::outgoingPeerToPeer(message* inMsg,netObj* inNetObj,xferList* inList)
 	: xferNode(inNetObj,inList) {
 
-	uint32_t	outPGN;
-	Serial.println("peer to peer outgoing");
-	if (inMsg && inNetObj) {								// As always check sanity..
+	complete = true;											// Assume we are done here.
+	success = false;											// Assume failure.
+	if (inMsg) {												// Always check sanity..
 		msgSize = inMsg->getNumBytes();					// Save off the size. Just in case..
 		if (msgSize>8) {										// If its's too big..
-			if (!inMsg->isBroadcast()) {					// If it's NOT to everyone..
-				outData = inMsg->passData();				// Hands over the actual data to us.
-				msgPacks = msgSize/7;						// Seven goes into num bytes.?.
+			if (!inMsg->isBroadcast()) {					// If it's NOT to everyone.. (Peer to peer)
+				getXferPGN(inMsg);							// Save off the PGN for later.
+				msgData = inMsg->passData();				// Hand over the actual data to us. (messages can do this, very scary.)
+				msgPacks = msgSize/7;						// Seven goes into num bytes?.
 				if (msgSize%7) {								//	We got leftovers?
 					 msgPacks++;								// Then add one.
 				}													// 
-				outAddr = inMsg->getPDUs();				// Peer to peer to.. 
-				outPGN = inMsg->getPGN();					// Grab off the PGN.
-				Serial.print("Outgoing PGN : 0x");
-				Serial.println(outPGN,HEX);
-				sendflowControlMsg(outPGN,reqToSend);	// Send reqToSend message.					
+				msgAddr = inMsg->getSourceAddr();		// Peer to peer to.. 
+				sendflowControlMsg(reqToSend);			// Send a reqToSend message.					
 				ourState = waitToSend;						// We don't send another 'till they say it's ok.							
 				xFerTimer.setTime(TR_MS,true);			// We allow this much time for a clear to send to come in.
-				complete = false;								// Ok, meets all criteria. Do not kill us yet, we're still running.
+				complete = false;								// Ok. Meets all criteria. Do not kill us yet, we're still running.
 			}
-		}
+		}	
 	}			
 }
 	
@@ -980,84 +1016,87 @@ outgoingPeerToPeer::outgoingPeerToPeer(message* inMsg,netObj* inNetObj,xferList*
 // If we grabbed the data buffer? We'll deal with it here..	
 outgoingPeerToPeer::~outgoingPeerToPeer(void) {
 
-	Serial.println(success);
-	if (outData) {			// If outData is non NULL. (We used it.)
-		free(outData);		// Recycle the RAM.
-		outData = NULL;	// Flag it as recycled so no one else tries to free it.
+	if (msgData) {			// If outData is non NULL. (We used it.)
+		free(msgData);		// Recycle the RAM.
+		msgData = NULL;	// Flag it as recycled so no one else tries to free it.
 	}
 }
 
+
+// Filter out messages that we are not interested in or not even addressed to us. Or that
+// it actually IS a message. Or, that we are actually still accepting messages. So many
+// things to go wrong!
+bool outgoingPeerToPeer::isOurMsg(message* inMsg) {
+
+	if (!complete) {																// We're still running.
+		if (inMsg) {																// We don't handle null messages.
+			if (inMsg->getPDUf()==FLOW_CON_PF) {							// Only interested in flow control messages.
+				if (inMsg->getPDUs()==ourNetObj->getAddr()) {			// Having our address.
+					if (xferPGN==ourList->getPGNFromTPData(inMsg)) {	// And matching our transfer PGN.
+						return true;												// In this case? Yeah, it's ours.
+					}
+				}
+			}
+		}
+	}
+	return false;
+}
 
 
 // Messages will be passed in for us to peruse. We'll filter out ones specifically for
 // ourselves and deal with them here. We'll return true if we dealt with the message.
+// Actually the only things we respond to are flow control messages. Anything else we'll
+// ignore.
 bool outgoingPeerToPeer::handleMsg(message* inMsg) {
 
-	bool handled;
+	bool 	handled;
+	bool	dataDone;
 	
-	handled = true;																// Wait for it..
-	if (inMsg) {																	// Sanity, we don't want to call on nothing.
-		handled = false;															// See? we stop the NULL messages.
-		if (inMsg->getPDUf()==FLOW_CON_PF) {								// If we got a flow control message..
-			Serial.print("handleMsg() flow control incoming address : ");
-			Serial.println(inMsg->getPDUs());
-			if (inMsg->getPDUs()==ourNetObj->getAddr()) {				// And it it's for us? How exiting!
-				
-				switch(inMsg->getDataByte(0)) {								// Lets take a look at the control byte..
-					case  clearToSend	:											// We got a clear to send message.			
-						Serial.println("got clear to send");
-						if (ourState==waitToSend) {							// If we were waiting for a clear to send..
-							if (inMsg->getDataByte(1)==0) {					// If flagged "Need more time"..
-								xFerTimer.setTime(TH_MS,true);				// Bump up the allowed time to this much. For clear or ACK.
-							} else {													// Else it's a normal "clear to send".
-								complete = sendDataMsg();						// We send a data packet.
-								if (complete) {									// If that was the last data packet..
-									ourState=waitForACK;							// We're now waiting for an ACK.
-								}														//
-								xFerTimer.setTime(T3_MS,true);				// We allow this much time for clear or ACK
-							}
-						} else if (ourState==waitForACK) {					// If we were waiting for an ACK.. {
-							if (inMsg->getDataByte(1)==0) {					// If flagged "Need more time"..
-								xFerTimer.setTime(TH_MS,true);				// Bump up the allowed time to this much. For clear or ACK.
-							} else {													// Else this message makes no sense.
-								reason = notAbort;								// We didn't get an abort. We got nonsense.
-								complete = true;									// In every case we are completely done.
-							}															//
-						} else {														// Else this message makes no sense.
-							reason = notAbort;									// We didn't get an abort. We got nonsense.
-							complete = true;										// In every case we are completely done.
-						}
-						handled =  true;											// And we handled this message.																
-					break;															// Still here? Let's go!
-					case  endOfMsg		:											// We got a end of message received message.
-						Serial.println("got end of message");
-						if (ourState==waitForACK) {							// If we were waiting for such a message..
-							success = true;										// Then we are completely done! And successful!
-						}																//
-						complete = true;											// In every case we are completely done.
-						handled =  true;											// And we handled this message.
-					break;															// Well, it matches the pattern.
-					case  abortMsg		:											// Got an abort?!
-						Serial.println("got abort");
-						reason = valueToReason(inMsg->getDataByte(1));	// Ask them why?
-						complete = true;											// In every case we are completely done.
-						handled =  true;											// And we handled this message.
-					break;
-					default				:
-						Serial.println("got nonsense.");
-						reason = notAbort;										// We didn't get an abort. We got nonsense.
-						complete = true;											// In every case we are completely done.
-						handled =  true;											// And we handled this message.																
-					break;															// Still here? Let's go!
-				}
-			} else {
-				Serial.print("Wrong address? 0x");
-				Serial.println(inMsg->getPDUs(),HEX);
-			}
-		}
-	}
-	return handled;
+	handled = false;														// We've done nothing yet.
+	if (isOurMsg(inMsg)) {												// Lets see if it's real and one we need to deal with.
+		switch(inMsg->getDataByte(0)) {								// Lets take a look at the control byte..
+			case  clearToSend	:											// We got a clear to send message.
+				if (ourState==waitToSend) {							// If we were waiting for a clear to send..
+					if (inMsg->getDataByte(1)==0) {					// If flagged "Need more time"..
+						xFerTimer.setTime(TH_MS,true);				// Bump up the allowed time to this much. For clear or ACK.
+					} else {													// Else it's a normal "clear to send".
+						dataDone = sendDataMsg();						// We send a data packet. (Setting local complete flag)
+						if (dataDone) {									// If that was the last data packet..
+							ourState=waitForACK;							// We're now waiting for an ACK.
+						}														//
+						xFerTimer.setTime(T3_MS,true);				// We allow this much time for clear or ACK
+					}															//
+				} else if (ourState==waitForACK) {					// If we were waiting for an ACK.. {
+					if (inMsg->getDataByte(1)==0) {					// If flagged "Need more time"..
+						xFerTimer.setTime(TH_MS,true);				// Bump up the allowed time to this much. For clear or ACK.
+					} else {													// Else this is messed up. We bail.
+						success = false;									// This is a fail.
+						complete = true;									// Crazy sauce stops the game.
+						reason = notAbort;								// We didn't get an abort. We got nonsense.
+					}															//
+				}																//
+			break;															// That should cover all those cases.
+			case  endOfMsg		:											// We got an end of message.
+				if (ourState==waitForACK) {							// If we were waiting for such a message..
+					success = true;										// Then we are successful!
+				}																//
+				complete = true;											// In every case we are completely done.
+			break;															// And that's it.
+			case  abortMsg		:											// Got an abort?!
+				complete = true;											// In every case we are done.
+				reason = valueToReason(inMsg->getDataByte(1));	// Ask them why?
+			break;															// Sigh, we failed.
+			default				:											// If we hit a default we are seriously messed up.
+				complete = true;											// In every other case we are done.
+				reason = notAbort;										// We didn't get an abort. We got nonsense.
+			break;															// Maybe we should take up knitting?
+		}																		//
+		handled = true;													// In all cases, it was our message. So we handled it.
+	} 																			//
+	return handled;														// We return our result.
 }
+						
+					
 
 	
 // During break time, we'll check to see if the timer's run out. If so? The message failed
@@ -1081,18 +1120,17 @@ void outgoingPeerToPeer::idleTime(void) {
 incomingBroadcast::incomingBroadcast(message* inMsg,netObj* inNetObj,xferList* inList)
 	: xferNode(inNetObj,inList) {
 
-	uint32_t	msgPGN;	
-		
 	msgSize	= pack16(inMsg->getDataByte(2),inMsg->getDataByte(1));	// Grab the number of bytes.
-	msg.setNumBytes(msgSize);														// Try to set our message buffer size..
-	if (msg.getNumBytes()==msgSize) {											// If we got the RAM..
+	if (resizeBuff(msgSize,&msgData)) {											// If we got the RAM.
+		getXferPGN(inMsg);															// Save off the PGN for later.
 		msgPacks = inMsg->getDataByte(3);										// Grab the number of packets.
-		msgPGN =  ourList->getPGNFromTPData(inMsg);							// Grab the PGN.
-		msg.setPGN(msgPGN);															// Use this on the message.
-		msg.setSourceAddr(inMsg->getSourceAddr());							// Grab source address.
-		msg.setPriority(inMsg->getPriority());									// We'll copy the incoming's priority.
+		msgAddr = inMsg->getSourceAddr();										// Grab source address.
 		xFerTimer.setTime(BCAST_T1_MS);											// We start the timeout timer.
 		complete = false;																// Clear the complete flag, were running!
+	} else {																				// Oh ohh, ran outta' RAM.
+		reason = resourceAbort;														// Failed to get the RAM.
+		success = false;																// So we failed.
+		complete = true;																// And we're done.
 	}
 }																					
 
@@ -1101,45 +1139,60 @@ incomingBroadcast::incomingBroadcast(message* inMsg,netObj* inNetObj,xferList* i
 // nothing to do here.
 incomingBroadcast::~incomingBroadcast(void) { }
 	
+	
+// The only thing we can accept is a broadcast data packet from the guy we're liked to. We
+// do need to be running and we don't bother with null messages either.
+bool incomingBroadcast::isOurMsg(message* inMsg) {
+
+	if (!complete) {																// We're still running.
+		if (inMsg) {																// We don't handle null messages.
+			if (inMsg->getPDUf()==DATA_XFER_PF) {							// We can only take in data packets.
+				if (inMsg->isBroadcast()) {									// If it's a broadcast data packet..
+					if (inMsg->getSourceAddr()==msgAddr) {					// If it's from our guy's source address..
+						if (inMsg->getNumBytes()==8) {						// If it has exactly 8 bytes data..
+							if (inMsg->getDataByte(0)==packNum) {			// Ok. If this matches our desired packet num..
+								return true;										// It's all good!
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return false;
+}
+
 
 // Broadcasts run completely on timers and there is no way to control them from this end.
 bool incomingBroadcast::handleMsg(message* inMsg) {
 
-	int	i;
-	bool handled;
+	int		i;
+	bool		handled;
+	message	outMsg;
 	
-	handled = true;																				// Wait for it..
-	if (inMsg) {																					// If we have non-NULL message.																			
-		handled = false;																			// We haven't handled the actual message. We handled a NULL one.
-		if (!complete) {																			// Sanity! NOT complete?
-			if (inMsg->getPDUf()==DATA_XFER_PF) {											// If it's a data packet..
-				if (inMsg->isBroadcast()) {													// If it's a broadcast data packet..
-					if (inMsg->getSourceAddr()==msg.getSourceAddr()) {					// If it's from our guy's source address..	
-						if (inMsg->getNumBytes()==8) {										// AND if it has exactly 8 bytes data..
-							if (inMsg->getDataByte(0)==packNum) {							// Ok. If this matches our desired packet num..
-								i = 1;																// Fine! We'll take it. Set up a counter.
-								while(byteTotal<msgSize&&i<8) {								// While we have data to transfer and a place to store it.
-									msg.setDataByte(byteTotal,inMsg->getDataByte(i));	// We transfer bytes.
-									byteTotal++;													// Bump up the total transferred.
-									i++;																// Bump local count.
-								}																		// 
-								packNum++;															// Bump up our packet ID num.
-								if (byteTotal==msgSize) {										// If we got ALL the bytes?
-									success = true;												// Just in case someone cares. Good for debugging?
-									addMsgToQ(&msg);												// Add what we built to the queue.
-									complete = true;												// Call for our recycling, we're done!
-								} else {																// Else there's more? Of course there's more!
-									xFerTimer.start();											// Restart the timeout timer.
-								}																		//
-								handled = true;													// Hey, we we handled that one!
-							}																			//
-						}																				//
-					}																					//
-				}																						//
-			}																							//
-		}																								//
-	}																									//
-	return handled;																				// Wasn't what we were looking for. Not handled.
+	handled = false;														// Not handled anything yet.
+	if (isOurMsg(inMsg)) {												// If it's a broadcast data packet from our guy.															
+		i = 1;																// Fine! We'll take it. Set up a counter.
+		while(byteTotal<msgSize&&i<8) {								// While we have data to transfer and a place to store it.
+			msgData[byteTotal] = inMsg->getDataByte(i);			// We transfer bytes.
+			byteTotal++;													// Bump up the total transferred.
+			i++;																// Bump local count.
+		}																		// 
+		packNum++;															// Bump up our packet ID num.
+		if (byteTotal==msgSize) {										// If we got ALL the bytes?
+			outMsg.acceptData(msgData,msgSize);						// We hand over ownership of our data buffer.
+			msgData = NULL;												// And we flag that we no longer own that data.
+			outMsg.setPGN(xferPGN);										// Set in our saved PGN.
+			outMsg.setSourceAddr(msgAddr);							// Set in their address.
+			addMsgToQ(&outMsg);											// Add what we built to the queue.
+			success = true;												// A success!
+			complete = true;												// Call for our recycling, we're done!
+		} else {																// Else there's more? Of course there's more!
+			xFerTimer.start();											// Restart the timeout timer.
+		}																		//
+		handled = true;													// Hey, we we handled that one!
+	}																			//
+	return handled;														// Wasn't what we were looking for. Not handled.
 }
 
 
@@ -1162,31 +1215,22 @@ void incomingBroadcast::idleTime(void) {
 incomingPeerToPeer::incomingPeerToPeer(message* inMsg,netObj* inNetObj,xferList* inList)
 	: xferNode(inNetObj,inList) {
 	
-	uint32_t	msgPGN;	
-	
-	if (!inMsg || !inNetObj) {																// If we're getting NULL inputs? Don't bother.
-		complete = true;																		// We're giving up in the face of overwhelming odds.
-		reason = notAbort;																	// Reason is : Somethings really messed up!
-		return;																					// Return and let this poor thing be recycled.	
-	}																								//
-	if (inMsg->getPDUf()==SEND_REQ) {													// Peer to peer, we only have the PDUf to go on.
-		if (inMsg->getPDUs()==inNetObj->getAddr()) {									// It's ours.
-			msgSize	= pack16(inMsg->getDataByte(2),inMsg->getDataByte(1));	// Grab the number of bytes.
-			msg.setNumBytes(msgSize);														// Try to set the message buffer size..
-			outAddr = inMsg->getSourceAddr();											// Grab return addr.
-			msgPGN = ourList->getPGNFromTPData(inMsg);								// Grab PGN from the incoming TP data block.
-			if (msg.getNumBytes()==msgSize) {											// If we got the RAM..
-				msgPacks = inMsg->getDataByte(3);										// Grab the number of packets.
-				msg.setPGN(msgPGN);															// Use this on the message.
-				msg.setSourceAddr(inMsg->getSourceAddr());							// Grab source address.
-				msg.setPriority(DEF_TP_PRIORITY);										// We have no way of knowing the messages priority. Use default.
-				sendflowControlMsg(msgPGN,clearToSend);								// Tell 'em it's ok, send the data.
-				xFerTimer.setTime(T2_MS);													// We start the timeout timer.
-				complete = false;																// Clear the complete flag. We're running!
-			} else {																				// Else we couldn't get the RAM?
-				sendflowControlMsg(msgPGN,abortMsg,resourceAbort);					// Send an abort message.
-				reason = resourceAbort;														// Note we ran outta' RAM.
-				complete = true;																// And tell 'em to dump us off the list. Ain't going to work.
+	if (inMsg) {																					// Quick sanity.
+		if (inMsg->getPDUf()==SEND_REQ) {													// Peer to peer, we only have the PDUf to go on.
+			if (inMsg->getPDUs()==inNetObj->getAddr()) {									// It's ours.
+				msgSize	= pack16(inMsg->getDataByte(2),inMsg->getDataByte(1));	// Grab the number of bytes.
+				if (resizeBuff(msgSize,&msgData)) {											// See if we can get the RAM.
+					getXferPGN(inMsg);															// Grab PGN to be used later.
+					msgAddr = inMsg->getSourceAddr();										// Grab return addr.
+					msgPacks = inMsg->getDataByte(3);										// Grab the number of packets.
+					sendflowControlMsg(clearToSend);											// Tell 'em it's ok, send the data.
+					xFerTimer.setTime(T2_MS);													// We start the timeout timer.
+					complete = false;																// Clear the complete flag. We're running!
+				} else {																				// Else we couldn't get the RAM?
+					sendflowControlMsg(abortMsg,resourceAbort);							// Send an abort message.
+					reason = resourceAbort;														// Note we ran outta' RAM.
+					complete = true;																// And tell 'em to dump us off the list. Ain't going to work.
+				}
 			}
 		}
 	}
@@ -1194,64 +1238,90 @@ incomingPeerToPeer::incomingPeerToPeer(message* inMsg,netObj* inNetObj,xferList*
 
 	
 
-// msg has the only allocated memory so it'll recycle it on it's way out. Nothing else for
-// us to do here.
-incomingPeerToPeer::~incomingPeerToPeer(void) { }
+// We attempted to allocate the message buffer. If we failed at some point it might be
+// laying about wasted RAM. If so, lets recycle it. If it's null, then either someone took
+// it over or we never allocated it. Either way, this'll do the right thing.
+incomingPeerToPeer::~incomingPeerToPeer(void) { resizeBuff(0,&msgData); }
 
 
+// Is this a message for us? Is this a message at all? Is it messed up in any way we can
+// tell? Are we actually still running?
+bool incomingPeerToPeer::isOurMsg(message* inMsg) {
 
+	if (!complete) {														// We're still running.
+		if (inMsg) {														// We don't handle null messages.
+			if (!inMsg->isBroadcast()) {								// If it's not a broadcast data packet..
+				if (inMsg->getPDUs()==ourNetObj->getAddr()) {	// It's for us?! How exiting!
+					if (inMsg->getSourceAddr()==msgAddr) {			// And, it's from our guy's source address..
+						if (inMsg->getNumBytes()==8) {				// If it has exactly 8 bytes data..
+							if (inMsg->getDataByte(0)==packNum) {	// Ok. If this matches our desired packet num..
+								return true;								// It's all good!
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return false;
+}
+
+
+// 
 bool incomingPeerToPeer::handleMsg(message* inMsg) {
 
-	uint32_t	msgPGN;
 	int		i;
 	bool		handled;
+	message	outMsg;
 	
-	handled = false;																		// Well, we haven't handled anything yet.
-	if (!inMsg || complete) return handled;										// If we have no message or are already complete? Just bail!																			
-	if (inMsg->getPDUs()==ourNetObj->getAddr()) {								// It's for us?! How exiting!
-		if (inMsg->getSourceAddr()==msg.getSourceAddr()) {						// And, it's from our guy's source address..
-			if (inMsg->getPDUf()==DATA_XFER_PF) {									// If it's a data packet..
-				if (inMsg->getNumBytes()==8) {										// AND if it has exactly 8 bytes data..
-					if (inMsg->getDataByte(0)==packNum) {							// Ok. If this matches our desired packet num..		
-						i = 1;																// Fine! We'll take it. Set up a counter.
-						while(byteTotal<msgSize&&i<8) {								// While we have data to transfer and a place to store it.
-							msg.setDataByte(byteTotal,inMsg->getDataByte(i));	// We transfer bytes.
-							byteTotal++;													// Bump up the total transferred.
-							i++;																// Bump local count.
-						}																		// 
-						packNum++;															// Bump up our packet ID num.
-						msgPGN = inMsg->getPGN();										// Now we need the actual PGN to pack into control messages.
-						if (byteTotal>=msgSize) {										// If we got 'em all..
-							sendflowControlMsg(msgPGN,endOfMsg);					// Tell 'em thank you!
-							success = true;												// We got 'em all.
-							addMsgToQ(&msg);													// stuff it into our incoming box.
-							complete = true;												// And we are done, pull the plug!
-						} else {																// Else there's more coming..
-							sendflowControlMsg(msgPGN,clearToSend);				// Tell 'em to send more!
-							xFerTimer.setTime(T2_MS);									// We start the timeout timer.
-						}																		// Both cases handled.
-						handled = true;													// We handled this message.
-					}																			//
-				}																				//
-			} else if (inMsg->getPDUf()==FLOW_CON_PF) {							// Or, if it's a flow control msg..
-				switch(inMsg->getDataByte(0)) {										// Let's see what they sent us.
-					case reqToSend		:													// Umm, we're receiving, not sending.
-					case clearToSend	:													// Same as above.
-					case BAM				:													// Whoa! This is peer to peer..
-						complete = true;													// Each case is crazy sauce. Pull the plug!
-						reason = notAbort;												// We didn't get an abort. They went nuts!
-					break;																	// Enough!
-					case abortMsg		:													// Abort is valid.
-						reason = valueToReason(inMsg->getDataByte(1));			// We'll save their reason.
-						complete = true;													// And we're done.
-					break;																	// Jump out.
-					default				:													// We got something else?!
-						complete = true;													// Again it's crazy sauce. Pull the plug!
-						reason = notAbort;												// We didn't get an abort, they sent gibberish.
-					break;																	//
-				}																				//
-				handled = true;															// We handled this message.
-			}					   
+	handled = false;															// Well, we haven't handled anything yet.
+	if (isOurMsg(inMsg)) {													// Is this message ours ans in good shape?																			
+		if (inMsg->getPDUf()==DATA_XFER_PF) {							// If it's a data packet..
+			i = 1;																// Fine! We'll take it. Set up a counter.
+			while(byteTotal<msgSize&&i<8) {								// While we have data to transfer and a place to store it.
+				msgData[byteTotal] = inMsg->getDataByte(i);			// We transfer bytes.
+				byteTotal++;													// Bump up the total transferred.
+				i++;																// Bump local count.
+			}																		// 
+			packNum++;															// Bump up our packet ID num.
+			if (byteTotal==msgSize) {										// If we got 'em all..
+				outMsg.acceptData(msgData,msgSize);						// We hand over ownership of our data buffer.
+				msgData = NULL;												// And we flag that we no longer own that data.
+				outMsg.setPGN(xferPGN);										// Set in our saved PGN.
+				outMsg.setSourceAddr(msgAddr);							// Set in their address.
+				addMsgToQ(&outMsg);											// Add what we built to the queue.
+				success = true;												// A success!
+				complete = true;												// Call for our recycling, we're done!
+				sendflowControlMsg(endOfMsg);								// Tell 'em we got it all.
+			} else if (byteTotal<msgSize) {								// Else there's more coming..
+				sendflowControlMsg(clearToSend);							// Tell 'em to send more.
+				xFerTimer.setTime(T2_MS);									// We start the timeout timer.
+			} else {
+				reason = noReason;											// Missed the ending somehow.
+				success = false;												// A fail.
+				complete = true;												// We missed the data count. Abort!!
+				sendflowControlMsg(abortMsg);								// Tell 'em
+			}													
+			handled = true;													// We handled this message.
+		} else if (inMsg->getPDUf()==FLOW_CON_PF) {					// Or, if it's a flow control msg..
+			switch(inMsg->getDataByte(0)) {								// Let's see what they sent us.
+				case reqToSend		:											// Umm, we're receiving, not sending.
+				case clearToSend	:											// Same as above.
+				case BAM				:											// Whoa! This is peer to peer..
+					complete = true;											// Each case is crazy sauce. Pull the plug!
+					reason = notAbort;										// We didn't get an abort. They went nuts!
+				break;															// Enough!
+				case abortMsg		:											// Abort is valid.
+					reason = valueToReason(inMsg->getDataByte(1));	// We'll save their reason.
+					success = false;											// A fail.
+					complete = true;											// And we're done.
+				break;															// Jump out.
+				default				:											// We got something else?!
+					complete = true;											// Again it's crazy sauce. Pull the plug!
+					reason = notAbort;										// We didn't get an abort, they sent gibberish.
+				break;															//
+			}																		//
+			handled = true;													// We handled this message.				   
 		}
 	}		
 	return handled;
@@ -1389,62 +1459,6 @@ bool xferList::handleMsg(message* ioMsg,bool received) {
 	return handled;															// Return the final result.
 }
 
-
-
-/*
-// Ok, a message has come in from either the net, OR, we wrote it. It could be a start of
-// a transfer we need to deal with. It could be part of a message we are already dealing
-// with. Most likely it's nothing that concerns us. But, we get first right of refusal. So
-// lets have a look at it.
-bool  xferList::handleMsg(message* ioMsg,bool received) {
-
-	xferNode*	trace;
-	bool			handled;
-	uint32_t		PGN;
-	message		tempMsg;
-	
-	handled = false;															// Assume we don't handle this.
-	if (ioMsg && ourNetObj) {												// Sanity first, is it not NULL? Is netObj not NULL?
-		if (received) {														// If its from the net..
-			if (ioMsg->getPDUf()==FLOW_CON_PF) {						// If we have an incoming BAM message..
-				PGN = getPGNFromTPData(ioMsg);							// Lets see what this BAM is all about. Could be broadcast or peer to peer.
-				tempMsg.setPGN(PGN);											// Drop this PGN into our temp message so we can..
-				if (tempMsg.isBroadcast()) {								// See if the multi packet message will be a broadcast..
-					addXfer(ioMsg,broadcastIn);							// Setup a brodcast transfer.
-					handled = true;											//	And this message has been handled!
-				} else {															// Else, it's peer to peer..
-					if (tempMsg.getPDUs()==ourNetObj->getAddr()) {	// Using tempMsg, see if it's actually to us..
-						addXfer(ioMsg,peerToPeerIn);						// Setup an incoming brodcast transfer.
-						handled = true;										// We handled it.
-					}																//
-				}																	//
-			}																		//
-		} else {																	// Else we wrote it? Yeech!
-			if (ioMsg->getNumBytes()>8) {									// If message is oversized..
-				Serial.println("incoming has more than 8 bytes");
-				Serial.print("And has PGN of : 0x");
-				Serial.println(ioMsg->getPGN(),HEX);
-				if (ioMsg->isBroadcast()) {								// If the message itself is a broadcast..
-					Serial.println("broadcast");
-					addXfer(ioMsg,broadcastOut);							// Setup a multi packet brodcast transfer.
-				} else {															// Else it's NOT a broadcast..
-					Serial.println("It's a peer to peer");
-					addXfer(ioMsg,peerToPeerOut);							// Set up a multi packet peer to peer transfer.
-				}																	//
-				handled = true;												// In any case, it's been handled.
-			}																		//
-		}																			//
-		if (!handled) {														// If the message has NOT been handled (By this function so far)..
-			trace = (xferNode*)getFirst();								// Grab first handler node from the list.
-			while(trace && !handled) {										// While we have non NULL node. AND message has not been handled..
-				handled = trace->handleMsg(ioMsg);						// Ask each node if they want/need to handle this message.
-				trace = (xferNode*)trace->getNext();					// Then grab the next node regardless of the answer.
-			}																		// That's it. either the message was handled or not.
-		}																			// 
-	}																				//
-	return handled;															// Return the final result.
-}
-*/
 
 // Basic garbage collection. Any transfer message nodes completed get marked as complete
 // and need to be recycled. Actually we only need to kill off one. This will be called

@@ -145,6 +145,7 @@ class message {
 				byte		getDataByte(int index);
 				byte*		peekData(void);
 				byte*		passData(void);
+				void		acceptData(byte* inData,int inNumBytes);
 				bool		msgIsLessThanName(netName* inName);
 				bool		isBroadcast(void);							// If the message is complete we can read this.
 				void		showMessage(void);
@@ -506,10 +507,12 @@ class xferNode :	public linkListObj {
 	
 	virtual	void			idleTime(void)=0;
 				abortReason	valueToReason(byte value);
+	virtual	bool			isOurMsg(message* inMsg);
 	virtual	bool			handleMsg(message* inMsg);
 				void			startTimer(int lowMs,int hiMs);
 				void			addMsgToQ(message* msg);
-				void			sendflowControlMsg(uint32_t aPGN,flowContType msgType,abortReason reason=notAbort);
+				void			getXferPGN(message* initMsg);
+				void			sendflowControlMsg(flowContType msgType,abortReason reason=notAbort);
 				bool			sendDataMsg(void);
 				
 				bool			complete;		// complete as true means we are done and ready to be recycled.
@@ -518,12 +521,16 @@ class xferNode :	public linkListObj {
 				netObj*		ourNetObj;		// Pointer back to the big boss. For addresses and sending stuff.
 				xferList*	ourList;			// Pointer back to the list object we are managed by. Needed for the getPGNFromTPData() call.
 				timeObj		xFerTimer;		// For holding before sending and timeouts for receiving.
-				byte*			outData;			// Used for holding the outgoing data. For those that send stuff.
-				uint8_t		outAddr;			// The address we send everything to.
+				uint8_t		msgAddr;			// Their address. Ours is passed in.
+				byte*			msgData;			// Used for holding the data. In or out.
 				uint16_t		msgSize;			// The total number of bytes for this message data block.
-				uint16_t		byteTotal;		// How many bytes we've sent/received of this message data block
 				uint8_t		msgPacks;		// How many packets we will be sending or expecting.
 				uint8_t		packNum;			// Numbering from 1, what packet are we sending or expecting.
+				uint16_t		byteTotal;		// How many bytes we've sent/received of this message data block
+				uint32_t		xferPGN;			// PGN of the message being transferred.
+				uint8_t		byte5;			// The three bytes of PGN for flow control messages. Read to go.
+				uint8_t		byte6;			//
+				uint8_t		byte7;			//
 						
 };
 
@@ -550,6 +557,7 @@ class outgoingPeerToPeer :	public xferNode {
 				outgoingPeerToPeer(message* inMsg,netObj* inNetObj,xferList* inList);
 	virtual	~outgoingPeerToPeer(void);
 	
+	virtual	bool	isOurMsg(message* inMsg);
 	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
 	
@@ -563,23 +571,23 @@ class incomingBroadcast :	public xferNode {
 				incomingBroadcast(message* inMsg,netObj* inNetObj,xferList* inList);
 	virtual	~incomingBroadcast(void);
 	
+	virtual	bool	isOurMsg(message* inMsg);
 	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
 	
-				message	msg;
 };
 
 
 class incomingPeerToPeer :	public xferNode {
 
 	public:
+	
 				incomingPeerToPeer(message* inMsg,netObj* inNetObj,xferList* inList);
 	virtual	~incomingPeerToPeer(void);
 	
+	virtual	bool	isOurMsg(message* inMsg);
 	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
-				
-				message	msg;
 };
 
 
