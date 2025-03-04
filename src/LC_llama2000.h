@@ -13,7 +13,7 @@
 #define DEF_2515_INT_PIN   2
 
 
-#define SECOND_LLAMA	// Comment out for first llama, uncomment for second llama.
+//#define SECOND_LLAMA	// Comment out for first llama, uncomment for second llama.
 
 #ifdef SECOND_LLAMA
 
