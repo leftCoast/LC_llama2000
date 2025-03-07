@@ -782,8 +782,14 @@ abortReason	xferNode::valueToReason(byte value) {
 // We get in a message, let us see if it is one sent specifically to us. We default to not ours.
 bool xferNode::isOurMsg(message* inMsg) {
 
-	if (!complete) { 
-		return checkFlowControlID(inMsg);
+	if (!complete && inMsg!=NULL) {									// First reality check.
+		if (inMsg->getPDUf()==FLOW_CON_PF) {						// If its flow control?
+			return checkFlowControlID(inMsg);						// Check the ID bits.
+		} else if (inMsg->isBroadcast()) {							// If it's a broadcast?
+			return true;													// We'll ok broadcasts as well.
+		} else if (inMsg->getPDUs()==ourNetObj->getAddr()) {	// Not a broadcast, but addressed to us?
+			return true;													// That sounds good too!
+		}
 	}
 	return false;
 }
@@ -870,6 +876,7 @@ void xferNode::saveFlowControlID(message* initMsg) {
 bool  xferNode::checkFlowControlID(message* inMsg)	{
 
 	if (inMsg) {
+		
 		if (byte5 == inMsg->getDataByte(5)) {
 			if (byte6 == inMsg->getDataByte(6)) {
 				if (byte7 == inMsg->getDataByte(7)) {
@@ -935,8 +942,6 @@ void xferNode::sendflowControlMsg(flowContType msgType,abortReason reason) {
 	flowContMsg.setDataByte(5,byte5);						//	Stuff pre-calculated PGN bytes in place.
 	flowContMsg.setDataByte(6,byte6);						// 
 	flowContMsg.setDataByte(7,byte7);						//
-	//Serial.println("Flow control is sending this..");
-	//flowContMsg.showMessage();
 	ourNetObj->outgoingingMsg(&flowContMsg);				// Off it goes!
 }
 
@@ -1273,6 +1278,7 @@ bool incomingPeerToPeer::handleMsg(message* inMsg) {
 			}													
 			handled = true;													// We handled this message.
 		} else if (inMsg->getPDUf()==FLOW_CON_PF) {					// Or, if it's a flow control msg..
+			
 			switch(inMsg->getDataByte(0)) {								// Let's see what they sent us.
 				case reqToSend		:											// Umm, we're receiving, not sending.
 				case clearToSend	:											// Same as above.
