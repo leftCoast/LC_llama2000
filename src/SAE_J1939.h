@@ -511,7 +511,8 @@ class xferNode :	public linkListObj {
 	virtual	bool			handleMsg(message* inMsg);
 				void			startTimer(int lowMs,int hiMs);
 				void			addMsgToQ(message* msg);
-				void			getXferPGN(message* initMsg);
+				void			saveFlowControlID(message* initMsg);
+				bool			checkFlowControlID(message* inMsg);
 				void			sendflowControlMsg(flowContType msgType,abortReason reason=notAbort);
 				bool			sendDataMsg(void);
 				
@@ -528,7 +529,7 @@ class xferNode :	public linkListObj {
 				uint8_t		packNum;			// Numbering from 1, what packet are we sending or expecting.
 				uint16_t		byteTotal;		// How many bytes we've sent/received of this message data block
 				uint32_t		xferPGN;			// PGN of the message being transferred.
-				uint8_t		byte5;			// The three bytes of PGN for flow control messages. Read to go.
+				uint8_t		byte5;			// The three bytes of PGN for flow control messages. Ready to go.
 				uint8_t		byte6;			//
 				uint8_t		byte7;			//
 						
@@ -557,7 +558,7 @@ class outgoingPeerToPeer :	public xferNode {
 				outgoingPeerToPeer(message* inMsg,netObj* inNetObj,xferList* inList);
 	virtual	~outgoingPeerToPeer(void);
 	
-	virtual	bool	isOurMsg(message* inMsg);
+	//virtual	bool	isOurMsg(message* inMsg);
 	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
 	
@@ -571,7 +572,7 @@ class incomingBroadcast :	public xferNode {
 				incomingBroadcast(message* inMsg,netObj* inNetObj,xferList* inList);
 	virtual	~incomingBroadcast(void);
 	
-	virtual	bool	isOurMsg(message* inMsg);
+	//virtual	bool	isOurMsg(message* inMsg);
 	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
 	
@@ -585,7 +586,7 @@ class incomingPeerToPeer :	public xferNode {
 				incomingPeerToPeer(message* inMsg,netObj* inNetObj,xferList* inList);
 	virtual	~incomingPeerToPeer(void);
 	
-	virtual	bool	isOurMsg(message* inMsg);
+	//virtual	bool	isOurMsg(message* inMsg);
 	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
 };
