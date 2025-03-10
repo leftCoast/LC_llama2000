@@ -511,8 +511,8 @@ class xferNode :	public linkListObj {
 	virtual	bool			handleMsg(message* inMsg);
 				void			startTimer(int lowMs,int hiMs);
 				void			addMsgToQ(message* msg);
-				void			saveFlowControlID(message* initMsg);
-				bool			checkFlowControlID(message* inMsg);
+				void			saveFCID(message* initMsg);
+				bool			checkFCID(message* inMsg);
 				void			sendflowControlMsg(flowContType msgType,abortReason reason=notAbort);
 				bool			sendDataMsg(void);
 				
@@ -558,7 +558,6 @@ class outgoingPeerToPeer :	public xferNode {
 				outgoingPeerToPeer(message* inMsg,netObj* inNetObj,xferList* inList);
 	virtual	~outgoingPeerToPeer(void);
 	
-	//virtual	bool	isOurMsg(message* inMsg);
 	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
 	
@@ -572,7 +571,6 @@ class incomingBroadcast :	public xferNode {
 				incomingBroadcast(message* inMsg,netObj* inNetObj,xferList* inList);
 	virtual	~incomingBroadcast(void);
 	
-	//virtual	bool	isOurMsg(message* inMsg);
 	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
 	
@@ -586,7 +584,6 @@ class incomingPeerToPeer :	public xferNode {
 				incomingPeerToPeer(message* inMsg,netObj* inNetObj,xferList* inList);
 	virtual	~incomingPeerToPeer(void);
 	
-	//virtual	bool	isOurMsg(message* inMsg);
 	virtual	bool	handleMsg(message* inMsg);
 	virtual	void	idleTime(void);
 };
@@ -604,6 +601,7 @@ public:
 	virtual	void		addXfer(message* ioMsg,xferTypes xferType);
 				bool		checkList(message* ioMsg);
 				bool		handleMsg(message* ioMsg,bool received);
+				bool		anyoneWaiting(void);
 				void		listCleanup(void);
 	virtual	void  	idle(void);
 	
@@ -681,77 +679,78 @@ class netObj :	public linkList,
 					public netName {							
 
 	public:
-				enum netObjState {															// Different states we can be in.
-					config,																		// Still on the bench being assembled.
-					startHold,																	// Certain addresses call for a start hold before beginning.
-					arbit,																		// Doing address arbitration.
-					addrErr,																		// Had an address error that we can't fix alone.
-					running																		// Everything seems fine. We're running.
+				enum netObjState {	// Different states we can be in.
+					config,				// Still on the bench being assembled.
+					startHold,			// Certain addresses call for a start hold before beginning.
+					arbit,				// Doing address arbitration.
+					addrErr,				// Had an address error that we can't fix alone.
+					running				// Everything seems fine. We're running.
 				};
 				
-				enum arbitState {																// Arbitration has it's own set of states.
-					waitingForAddrs,															// Send us your addresses and names has been called. Gather them.
-					waitingForClaim,															// Our address claim has been sent. Wait to see if it is challenged.
+				enum arbitState {		// Arbitration has it's own set of states.
+					waitingForAddrs,	// Send us your addresses and names has been called. Gather them.
+					waitingForClaim,	// Our address claim has been sent. Wait to see if it is challenged.
 				};	
 				
 				netObj(void);
 	virtual	~netObj(void);
 	
-	virtual	void		begin(netName* inName,byte inAddr,addrCat inAddCat);	// ** YOU WILL NEED TO CALL THIS BEFORE USE ** - Initial setup.
-	virtual	void		addMsgHandler(msgHandler* inCA);								// ** USE THIS TO ADD YOUR HANDLER OBJECTS FOR THE MESSAGEDS YOU WANT TO SEND/RECEIVE **
-	virtual  void		sendMsg(message* outMsg)=0;									// ** YOU WRITE THIS ONE TO SEND 8 BYTE OR SMALLER MESSAGES. DON'T CALL IT! **
-	virtual  void		incomingMsg(message* inMsg);									// ** WHEN A MESSAGE COMES IN FROM THE HARDWARE, PASS IT IN HERE. **
-	virtual  void		outgoingingMsg(message* inMsg);								// ** USE THIS TO SEND MESSAGES ** IT CAN HANDLE >8 BYTE MESSAGES AND WILL CALL sendMsg() FOR YOU.
-				void		refreshAddrList(void);											// ** USE THIS TO CLEAR THEN REFRESH THE ADDRESS LIST, GIVE IT A SECOND TO COMPLETE. **
-				void		checkMessages(void);												// If we have one we'll grab it and deal with it. -(Can have > 8 data bytes)-
-				void		startHoldTimer(void);											// Calculate and start the address holding time delay. Function of address.
-				void		clearErr(void);													// This will clear the address error and restart the process.
-				void		changeState(netObjState newState);							// Keeping track of what we are up to.
-				void		stateName(netObjState aState);								// state -> "state" kinda' thing for debugging.
+	virtual	void		begin(netName* inName,byte inAddr,addrCat inAddCat);					// ** YOU WILL NEED TO CALL THIS BEFORE USE ** - Initial setup.
+	virtual	void		addMsgHandler(msgHandler* inCA);												// ** USE THIS TO ADD YOUR HANDLER OBJECTS FOR THE MESSAGEDS YOU WANT TO SEND/RECEIVE **
+	virtual  void		sendMsg(message* outMsg)=0;													// ** YOU WRITE THIS ONE TO SEND 8 BYTE OR SMALLER MESSAGES. DON'T CALL IT! **
+	virtual  void		incomingMsg(message* inMsg);													// ** WHEN A MESSAGE COMES IN FROM THE HARDWARE, PASS IT IN HERE. **
+	virtual  void		outgoingingMsg(message* inMsg);												// ** USE THIS TO SEND MESSAGES ** IT CAN HANDLE >8 BYTE MESSAGES AND WILL CALL sendMsg() FOR YOU.
+				bool		isBusy();																			// ** USE TO SEE IF WE ARE IN A WAIT STATE **
+				void		refreshAddrList(void);															// ** USE THIS TO CLEAR THEN REFRESH THE ADDRESS LIST, GIVE IT A SECOND TO COMPLETE. **
+				void		checkMessages(void);																// If we have one we'll grab it and deal with it. -(Can have > 8 data bytes)-
+				void		startHoldTimer(void);															// Calculate and start the address holding time delay. Function of address.
+				void		clearErr(void);																	// This will clear the address error and restart the process.
+				void		changeState(netObjState newState);											// Keeping track of what we are up to.
+				void		stateName(netObjState aState);												// enum state -> text "state" kinda' thing for debugging.
 														
-				void		setAddrCat(addrCat inAddrCat);								// How we deal with addressing.
-				addrCat	getAddrCat(void);													// See how we deal with addressing.
-				void		setAddr(byte inAddr);											// Set a new address.
-				byte		getAddr(void);														// Here's our current address.
-				byte		findAddr(netName* inName);										// If we have a device's netName, see if we can find it's address.
-				netName	findName(byte inAddr);											// If we have a device's address, see if we can find it's name.
-				void		showAddrList(bool showNames);									// ** Another human readable printout. **
+				void		setAddrCat(addrCat inAddrCat);												// How we deal with addressing.
+				addrCat	getAddrCat(void);																	// See how we deal with addressing.
+				void		setAddr(byte inAddr);															// Set a new address.
+				byte		getAddr(void);																		// Here's our current address.
+				byte		findAddr(netName* inName);														// If we have a device's netName, see if we can find it's address.
+				netName	findName(byte inAddr);															// If we have a device's address, see if we can find it's name.
+				void		showAddrList(bool showNames);													// ** Another human readable printout. **
 				
-				bool		isReqAddrClaim(message* inMsg);								// Is this a request for address claimed msg?
-				bool		isAddrClaim(message* inMsg);									// Is this an address claimed msg?
-				bool		isCantClaim(message* inMsg);									// Is this a fail to claim address msg?
-				bool		isCommandedAddr(message* inMsg);								// Is this a commanded address msg?
-				void		handleReqAdderClaim(message* inMsg);						// Handle a request for address claimed msg.
-				void		handleAdderClaim(message* inMsg);							// Handle an address claimed msg.
-				void		handleCantClaim(message* inMsg);								// Handle a failed to claim an address msg.				
-				void		handleComAddr(message* inMsg);								// Handle a commanded address message.
-				void		startArbitTimer(void);											// Calculate and start the arbitration time delay. Random function.
-				void		startClaimTimer(void);											// Calculate and start the claim time delay. Same random function.
-				void		startArbit(void);													// From whatever state we are in now, start arbitration.
-				void		startAddCom(void);												// Changing state to telling someone to goto a new address.
-				byte		chooseAddr(void);													// We have a list of claimed addresses and a range of allowed addresses. Find one.
-				void		checkArbit(void);													// Arbitration is all about wait states.
-				void		sendRequestForAddressClaim(byte inAddr);					// Tell us your name and address.
-				void		sendAddressClaimed(bool tryFail=true);						// This is our name and address.
-				void		sendCannotClaimAddress(void);									// We can't find an address!
-				void		addrCom(netName* objName,byte newAddr);					// ** CALL THIS TO CHANGE AN ECU'S ADDRES **
+				bool		isReqAddrClaim(message* inMsg);												// Is this a request for address claimed msg?
+				bool		isAddrClaim(message* inMsg);													// Is this an address claimed msg?
+				bool		isCantClaim(message* inMsg);													// Is this a fail to claim address msg?
+				bool		isCommandedAddr(message* inMsg);												// Is this a commanded address msg?
+				void		handleReqAdderClaim(message* inMsg);										// Handle a request for address claimed msg.
+				void		handleAdderClaim(message* inMsg);											// Handle an address claimed msg.
+				void		handleCantClaim(message* inMsg);												// Handle a failed to claim an address msg.				
+				void		handleComAddr(message* inMsg);												// Handle a commanded address message.
+				void		startArbitTimer(void);															// Calculate and start the arbitration time delay. Random function.
+				void		startClaimTimer(void);															// Calculate and start the claim time delay. Same random function.
+				void		startArbit(void);																	// From whatever state we are in now, start arbitration.
+				void		startAddCom(void);																// Changing state to telling someone to goto a new address.
+				byte		chooseAddr(void);																	// We have a list of claimed addresses and a range of allowed addresses. Find one.
+				void		checkArbit(void);																	// Arbitration is all about wait states.
+				void		sendRequestForAddressClaim(byte inAddr);									// Tell us your name and address.
+				void		sendAddressClaimed(bool tryFail=true,byte outAddr=GLOBAL_ADDR);	// This is our name and address.
+				void		sendCannotClaimAddress(void);													// We can't find an address!
+				void		addrCom(netName* objName,byte newAddr);									// ** CALL THIS TO CHANGE AN ECU'S ADDRES **
 
 				
-	virtual	void			idle(void);														// Keeping things running.
+	virtual	void			idle(void);																		// Keeping things running.
 	
-				msgQ			ourMsgQ;															// A place to store incoming messages.
+				msgQ			ourMsgQ;																			// A place to store incoming messages.
 				
-				netObjState	ourState;														// What state we are in now.
-				timeObj		holdTimer;														// Our timer for startup holding.
+				netObjState	ourState;																		// What state we are in now.
+				timeObj		holdTimer;																		// Our timer for startup holding.
 																								
-				addrCat		ourAddrCat;														// How we deal with addressing.
-				byte			addr;																// Our current network address.
-				arbitState	ourArbitState;													// Arbitration has a couple wait states.
-				timeObj		arbitTimer;														// Arbitration timer.
+				addrCat		ourAddrCat;																		// How we deal with addressing.
+				byte			addr;																				// Our current network address.
+				arbitState	ourArbitState;																	// Arbitration has a couple wait states.
+				timeObj		arbitTimer;																		// Arbitration timer.
 				timeObj		claimTimer;
-				addrList		ourAddrList;													// List of used addresses from the network.
+				addrList		ourAddrList;																	// List of used addresses from the network.
 				
-				xferList		ourXferList;													// The transport protocol list.
+				xferList		ourXferList;																	// The transport protocol list.
 };
 
 
@@ -784,4 +783,5 @@ class msgHandler :	public linkListObj {
 };
 
 
+ 
 #endif

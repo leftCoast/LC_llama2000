@@ -731,10 +731,10 @@ xferNode::xferNode(netObj* inNetObj,xferList* inList)
 	success		= false;		// We start without success.
 	complete		= true;		// Let the offspring set this.
 	ourNetObj	= inNetObj;	// Save off our netObj pointer.
-	ourList		= inList;	// Save our list manager thingy.
+	ourList		= inList;	// Save a pointer to our list manager thingy.
 	msgData		= NULL;		// Start all pointers we may allocate to NULL
 	byteTotal	= 0;			// None been sent. yet..
-	packNum		= 1;			// The packet ID we'll be sending/expecting.
+	packNum		= 1;			// The packet number we'll be sending/expecting.
 }
 	
 
@@ -759,14 +759,14 @@ xferNode::~xferNode(void) {
 	}
 	*/
 	if (msgData) {			// If someone set it..
-		free(msgData);		// We release it.
+		free(msgData);		// We'll release it.
 		msgData = NULL;	// Flag it so no one else tries to release it.
 	}
 }
 
 
-// In an attempt to shut up the compiler, use this to decode a data value to an abort
-// reason.
+// In an attempt to shut up the compiler, use this to decode a flow control data value to
+// an abort reason.
 abortReason	xferNode::valueToReason(byte value) {
 
 	switch(value) {
@@ -779,12 +779,13 @@ abortReason	xferNode::valueToReason(byte value) {
 }
 
 
-// We get in a message, let us see if it is one sent specifically to us. We default to not ours.
+// We get in a message, let us sanity check it and then see if it is one sent specifically
+// to us. We default to not ours.
 bool xferNode::isOurMsg(message* inMsg) {
 
 	if (!complete && inMsg!=NULL) {									// First reality check.
 		if (inMsg->getPDUf()==FLOW_CON_PF) {						// If its flow control?
-			return checkFlowControlID(inMsg);						// Check the ID bits.
+			return checkFCID(inMsg);						// Check the ID bits.
 		} else if (inMsg->isBroadcast()) {							// If it's a broadcast?
 			return true;													// We'll ok broadcasts as well.
 		} else if (inMsg->getPDUs()==ourNetObj->getAddr()) {	// Not a broadcast, but addressed to us?
@@ -848,13 +849,13 @@ bool xferNode::sendDataMsg(void) {
 // We are either sending a oversize message or receiving one. In either case, there is an
 // initial message that starts all of this. Either and oversized message we are sending or
 // some sort of BAM message we are receiving. We use this and get the PGN so we can use
-// it later. We'll need it.
-void xferNode::saveFlowControlID(message* initMsg) {
+// it later as a flow control message ID.
+void xferNode::saveFCID(message* initMsg) {
 
 	uint32_t	aPGN;
 	
 	if (initMsg) {														// Sanity, we actually got one.
-		if (initMsg->getPDUf()==FLOW_CON_PF) {					// Ok, it's flow control. We can grab it from here.
+		if (initMsg->getPDUf()==FLOW_CON_PF) {					// Ok, it's flow control. We grab the three bytes from here.
 			xferPGN = ourList->getPGNFromTPData(initMsg);	// We have this handy function for that.
 		} else {															// Else its NOT a flow control. Must be from us.
 			xferPGN = initMsg->getPGN();							// Messages know how to do this for themselves.
@@ -873,7 +874,7 @@ void xferNode::saveFlowControlID(message* initMsg) {
 }
 	
 	
-bool  xferNode::checkFlowControlID(message* inMsg)	{
+bool  xferNode::checkFCID(message* inMsg)	{
 
 	if (inMsg) {
 		
@@ -967,7 +968,7 @@ outgoingBroadcast::outgoingBroadcast(message* inMsg,netObj* inNetObj,xferList* i
 	if (inMsg && inNetObj) {					// OK. As always, check sanity..
 		msgSize = inMsg->getNumBytes();		// Save off the size. (used later)
 		if (msgSize>8) {							// If its's too big..
-			saveFlowControlID(inMsg);			// Save off the PGN for later.
+			saveFCID(inMsg);			// Save off the PGN for later.
 			msgData = inMsg->passData();		// Hands over the actual data to us. (Yes messages can do this.)
 			msgPacks = msgSize/7;				// Seven goes into num bytes.?.
 			if (msgSize%7) {						//	We got leftovers?
@@ -1020,7 +1021,7 @@ outgoingPeerToPeer::outgoingPeerToPeer(message* inMsg,netObj* inNetObj,xferList*
 		msgSize = inMsg->getNumBytes();					// Save off the size. Just in case..
 		if (msgSize>8) {										// If its's too big..
 			if (!inMsg->isBroadcast()) {					// If it's NOT to everyone.. (Peer to peer)
-				saveFlowControlID(inMsg);					// Save off the PGN for later.
+				saveFCID(inMsg);					// Save off the PGN for later.
 				msgData = inMsg->passData();				// Hand over the actual data to us. (messages can do this, very scary.)
 				msgPacks = msgSize/7;						// Seven goes into num bytes?.
 				if (msgSize%7) {								//	We got leftovers?
@@ -1055,7 +1056,7 @@ bool outgoingPeerToPeer::isOurMsg(message* inMsg) {
 	if (!complete) {																// We're still running.
 		if (inMsg) {																// We don't handle null messages.
 			if (inMsg->getPDUf()==FLOW_CON_PF) {							// Only interested in flow control messages.
-				return(checkFlowControlID(inMsg));							// Check our 3 saved bytes with these 3 from their data.
+				return(checkFCID(inMsg));							// Check our 3 saved bytes with these 3 from their data.
 			}
 		}
 	}
@@ -1142,7 +1143,7 @@ incomingBroadcast::incomingBroadcast(message* inMsg,netObj* inNetObj,xferList* i
 
 	msgSize	= pack16(inMsg->getDataByte(2),inMsg->getDataByte(1));	// Grab the number of bytes.
 	if (resizeBuff(msgSize,&msgData)) {											// If we got the RAM.
-		saveFlowControlID(inMsg);													// Save off the PGN for later.
+		saveFCID(inMsg);													// Save off the PGN for later.
 		msgPacks = inMsg->getDataByte(3);										// Grab the number of packets.
 		msgAddr = inMsg->getSourceAddr();										// Grab source address.
 		xFerTimer.setTime(BCAST_T1_MS);											// We start the timeout timer.
@@ -1217,7 +1218,7 @@ incomingPeerToPeer::incomingPeerToPeer(message* inMsg,netObj* inNetObj,xferList*
 			if (inMsg->getPDUs()==inNetObj->getAddr()) {									// It's ours.
 				msgSize	= pack16(inMsg->getDataByte(2),inMsg->getDataByte(1));	// Grab the number of bytes.
 				if (resizeBuff(msgSize,&msgData)) {											// See if we can get the RAM.
-					saveFlowControlID(inMsg);													// Grab PGN to be used later.
+					saveFCID(inMsg);													// Grab PGN to be used later.
 					msgAddr = inMsg->getSourceAddr();										// Grab return addr.
 					msgPacks = inMsg->getDataByte(3);										// Grab the number of packets.
 					sendflowControlMsg(clearToSend);											// Tell 'em it's ok, send the data.
@@ -1443,6 +1444,24 @@ bool xferList::handleMsg(message* ioMsg,bool received) {
 }
 
 
+// Is there a transfer node that's currently waiting on anything?
+bool xferList::anyoneWaiting(void) {
+
+	xferNode*	trace;
+	
+	trace = (xferNode*)getFirst();							// Grab the pointer to the top of the list.
+	while(trace) {													// While we don't have a null pointer..
+		if (!trace->complete) {									// If this node is still running..
+			if (trace->xFerTimer.getFraction()!=100) {	// If it's currently busy.
+				return true;										// Found a busy one! Return true.
+			}															// If this node was NOT complete..
+		}																//
+		trace = (xferNode*)trace->getNext();				// We jump to the next. (Till we hit a null pointer.)
+	}																	//
+	return false;													// I guess no one is busy. Return false.
+}
+
+
 // Basic garbage collection. Any transfer message nodes completed get marked as complete
 // and need to be recycled. Actually we only need to kill off one. This will be called
 // over and over so, if there are more, the'll get hit soon.
@@ -1571,6 +1590,17 @@ void netObj::outgoingingMsg(message* outMsg) {
 }
 
 
+// Fire off a process and this should give you a good idea when it's done.
+bool netObj::isBusy() {
+
+	if (holdTimer.getFraction()!=1)	return true;	// Hold timer running? We're busy!
+	if (arbitTimer.getFraction()!=1) return true;	// Arbitration timer running? We're busy!
+	if (claimTimer.getFraction()!=1) return true;	// Claim timer running? We're busy!
+	if (ourXferList.anyoneWaiting())	return true;	// Transer protocol timer running? You guessed it!
+	return false;												// Oh! I guess we're free..
+}
+	
+	
 // This is called to first clear the address list, then make the
 // sendRequestForAddressClaim() function to tell everyone to broadcast in their name and
 // addresses. NOTE : This makes the call, but you must wait at least 750 ms before reading
@@ -1841,7 +1871,7 @@ void netObj::handleReqAdderClaim(message* inMsg) {
 		case arbit		:																		// Arbitrating
 		case running	:																		// Or running..
 			if (inMsg->getPDUs()==GLOBAL_ADDR || inMsg->getPDUs()==addr) {		// If sent to everyone or just us..
-				sendAddressClaimed(true);													// We send our address & name.
+				sendAddressClaimed(true,inMsg->getSourceAddr());					// We send our address & name.
 			}
 		break;
 		case addrErr	:																		// We failed to get an address.
@@ -1991,6 +2021,7 @@ void netObj::checkArbit(void) {
 	}															//
 	else if (ourArbitState==waitingForClaim) {	// Waiting to see if our address claim is challenged.
 		if (arbitTimer.ding()) {						// If waiting for challenge is over..
+			arbitTimer.reset();							// Shut off the timer.
 			if (addr==NULL_ADDR) {						// If we are back to NULL_ADDR, we were challenged and lost!
 				startArbit();								// We start all over again.
 			} else {											// Else, we have a unchallenged address!
@@ -2018,7 +2049,7 @@ void netObj::sendRequestForAddressClaim(byte inAddr) {
 }
 
 
-void netObj::sendAddressClaimed(bool tryFail) {
+void netObj::sendAddressClaimed(bool tryFail,byte outAddr) {
 	
 	message	ourMsg;								// Create a message. (Default buffer size.)
 	byte*		ourName;								// Pointer for our name's data.
@@ -2033,7 +2064,9 @@ void netObj::sendAddressClaimed(bool tryFail) {
 		ourMsg.setSourceAddr(NULL_ADDR);		// Set NULL address. (NACK)
 	}													//
 	ourMsg.setPGN(ADDR_CLAIMED);				// Set the PGN..
-	ourMsg.setPDUs(GLOBAL_ADDR);				// Then set destination address as lower bits of PGN.
+	ourMsg.setPDUs(outAddr);					// Then set destination address as lower bits of PGN.
+	//Serial.println("Sending");
+	//ourMsg.showMessage();
 	outgoingingMsg(&ourMsg);					// Off it goes!													
 }
 
@@ -2105,11 +2138,11 @@ void netObj::idle(void) {
 				trace->idleTime();							// Give 'em some time to do things.
 				trace = (msgHandler*)trace->getNext();	// Grab the next one.
 			}														//
-			if (claimTimer.ding()) {						// If the claim timer dings. Means it was running..
-				claimTimer.reset();							// We shut it off.
-			}
 		break;													//
 		default			:						break;		// Anything else? Basically do nothing.
+	}																//
+	if (claimTimer.ding()) {								// If the claim timer dings. Means it was running..
+		claimTimer.reset();									// We shut it off.
 	}		
 }
 
