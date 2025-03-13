@@ -51,13 +51,15 @@
 #define NULL_ADDR			254		// Source address only. "Hey, I have no address."
 #define GLOBAL_ADDR		255		// Destination only address. "Hey everyone!"
 
-#define REQ_MESSAGE		59904		// Request PGN. "Hey EVERYONE send out your name and address."
+#define ACKNOWLEDGE_PGN 59392		// Data[0] : ack=0, nack=1, denied=2, notNow=3.
+#define REQ_MESSAGE		59904		// Request PGN. "Hey you, or everyone, send out this info."
 #define DATA_XFER			60160		// Multi packet chunk of data.
 #define BAM_COMMAND		60416		// Big load coming! Make room!
 #define ADDR_CLAIMED		60928		// Claimed PGN. "Hey EVERYONE this is my name and address." Or can't claim one.
 #define COMMAND_ADDR		65240		// We were told to use this address.
 
-#define REQ_ADDR_CLAIM_PF	234	// 0xEA, PS = Destination addr.
+#define ACKNOWLEDGE_PF		232	// PDUs = Dest Addr, Data[0] : ack=0, nack=1, denied=2, notNow=3.
+#define REQUEST_PF			234	// 0xEA, PS = Destination addr. 
 #define DATA_XFER_PF			235	// 0xEB, PS = 255 or Destination addr.
 #define FLOW_CON_PF			236	// 0xEC, PS = 255 or Destination addr.
 #define SEND_REQ				236	// 0xEC, PS = Destination addr. Doubles as peer to peer BAM message.
@@ -108,7 +110,7 @@ bool	isBlank(uint32_t inVal);
 uint16_t pack16(byte hiByte,byte lowByte);
 uint32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte);
 
-
+extern bool showReq;
 
 // ***************************************************************************************
 //				----- message -----
@@ -146,8 +148,12 @@ class message {
 				byte*		peekData(void);
 				byte*		passData(void);
 				void		acceptData(byte* inData,int inNumBytes);
+				void		setData5PGN(uint32_t PGN);						// Different messages store PGNs in the data.
+				uint32_t getData5PGN(void);								// Some do it in data 5,6,7
+				void		setData0PGN(uint32_t PGN);						// Some do it in data 0,1,2
+				uint32_t getData0PGN(void);								// This should make setting and getting them a lot easier.
 				bool		msgIsLessThanName(netName* inName);
-				bool		isBroadcast(void);							// If the message is complete we can read this.
+				bool		isBroadcast(void);								// If the message is complete we can read this.
 				void		showMessage(void);
 				
 	protected:
@@ -597,7 +603,6 @@ public:
 	virtual	~xferList(void);
 	
 				void		begin(netObj* inNetObj);
-				uint32_t	getPGNFromTPData(message* inMsg);
 	virtual	void		addXfer(message* ioMsg,xferTypes xferType);
 				bool		checkList(message* ioMsg);
 				bool		handleMsg(message* ioMsg,bool received);
@@ -665,6 +670,14 @@ enum addrCat {
 };
 
 
+// Flavors of acknowledgement
+enum ackType {
+
+	ack,		// Sure he's the data you wanted.
+	nack,		// That's not going to work out.
+	denied,	// I -could- but I won't.
+	notNow	// I'm on the phone, call back!
+};	
 
 // This is the base class that holds all the logic for navigating an SAE J1939 network.
 // For those of you that are boaters out there. This is the actual network that NMEA 2000
@@ -716,12 +729,17 @@ class netObj :	public linkList,
 				netName	findName(byte inAddr);															// If we have a device's address, see if we can find it's name.
 				void		showAddrList(bool showNames);													// ** Another human readable printout. **
 				
-				bool		isReqAddrClaim(message* inMsg);												// Is this a request for address claimed msg?
+				uint32_t getRequestPGN(message* reqMsg);												// Returns the PGN encoded in a request messages's data.
+				void		setRequestPGN(uint32_t PGN, message* reqMsg);							// Encodes a PGN into a request message's data.
+				void		returnAck(ackType inType,int inAddr,uint32_t PGN);
+				bool		isRequestMsg(message* inMsg);													// Is this a request msg?
+				bool		isAddrClaimReq(message* inMsg);												// Is this specifically and address claim request, aimed at us?
+				void		handelAddrClaimReq(message* inMsg);											// Handle an address claimed msg.
 				bool		isAddrClaim(message* inMsg);													// Is this an address claimed msg?
 				bool		isCantClaim(message* inMsg);													// Is this a fail to claim address msg?
 				bool		isCommandedAddr(message* inMsg);												// Is this a commanded address msg?
-				void		handleReqAdderClaim(message* inMsg);										// Handle a request for address claimed msg.
-				void		handleAdderClaim(message* inMsg);											// Handle an address claimed msg.
+				
+				void		handleAddrClaim(message* inMsg);											// Handle an address claimed msg.
 				void		handleCantClaim(message* inMsg);												// Handle a failed to claim an address msg.				
 				void		handleComAddr(message* inMsg);												// Handle a commanded address message.
 				void		startArbitTimer(void);															// Calculate and start the arbitration time delay. Random function.
@@ -733,7 +751,7 @@ class netObj :	public linkList,
 				void		sendRequestForAddressClaim(byte inAddr);									// Tell us your name and address.
 				void		sendAddressClaimed(bool tryFail=true,byte outAddr=GLOBAL_ADDR);	// This is our name and address.
 				void		sendCannotClaimAddress(void);													// We can't find an address!
-				void		addrCom(netName* objName,byte newAddr);									// ** CALL THIS TO CHANGE AN ECU'S ADDRES **
+				void		addrCom(netName* objName,byte newAddr);									// ** USE THIS TO CHANGE ANOTHER ECU'S ADDRES **
 
 				
 	virtual	void			idle(void);																		// Keeping things running.

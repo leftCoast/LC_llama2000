@@ -46,7 +46,8 @@ uint32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
 }
 
 
-
+bool showReq = false;
+	
 // ***************************************************************************************
 //				----- message class -----
 // ***************************************************************************************
@@ -234,6 +235,58 @@ void message::acceptData(byte* inData,int inNumBytes) {
 	setNumBytes(0);			// We recycle ours.
 	msgData = inData;			// We point at theirs.
 	numBytes = inNumBytes;	// And we patch our size to what we are TOLD is theirs.
+}
+
+
+// Starting at data byte 5 store a 3 byte version of this PGN.
+void message::setData5PGN(uint32_t PGN) {
+	
+	if (numBytes>=8) {
+		setDataByte(5,PGN & 0x000000FF);
+		PGN = PGN >> 8;
+		setDataByte(6,PGN & 0x000000FF);
+		PGN = PGN >> 8;
+		setDataByte(7,PGN & 0x000000FF);
+	}
+}
+
+
+// Starting at data byte 5 read the 3 byte version of the stored PGN.
+uint32_t message::getData5PGN(void) {
+	
+	uint32_t PGN;
+	
+	PGN = 0;
+	if (numBytes>=8) {
+		PGN = pack32(0,getDataByte(7),getDataByte(6),getDataByte(5));
+	}
+	return PGN;
+}
+
+
+// Starting at data byte 0 store a 3 byte version of this PGN.
+void message::setData0PGN(uint32_t PGN) {
+	
+	if (numBytes>=3) {
+		setDataByte(0,PGN & 0x000000FF);
+		PGN = PGN >> 8;
+		setDataByte(1,PGN & 0x000000FF);
+		PGN = PGN >> 8;
+		setDataByte(2,PGN & 0x000000FF);
+	}
+}
+
+
+// Starting at data byte 0 read the 3 byte version of the stored PGN.
+uint32_t message::getData0PGN(void) {
+	
+	uint32_t PGN;
+	
+	PGN = 0;
+	if (numBytes>=3) {
+		PGN = pack32(0,getDataByte(2),getDataByte(1),getDataByte(0));
+	}
+	return PGN;
 }
 
 
@@ -856,16 +909,16 @@ void xferNode::saveFCID(message* initMsg) {
 	
 	if (initMsg) {														// Sanity, we actually got one.
 		if (initMsg->getPDUf()==FLOW_CON_PF) {					// Ok, it's flow control. We grab the three bytes from here.
-			xferPGN = ourList->getPGNFromTPData(initMsg);	// We have this handy function for that.
+			xferPGN = initMsg->getData5PGN();					// We have this handy function for that.
 		} else {															// Else its NOT a flow control. Must be from us.
 			xferPGN = initMsg->getPGN();							// Messages know how to do this for themselves.
 		}
 		aPGN	= xferPGN;												// Copy the PGN, this is going to tear things apart..
 		byte5	= aPGN & 0x000000FF;									// Grab LSB
 		aPGN	= aPGN >> 8;											// Slide over PGN.
-		byte6	= aPGN & 0x000000FF;									// Grab LSB
+		byte6	= aPGN & 0x000000FF;									// Grab MDB
 		aPGN	= aPGN >> 8;											// Slide over PGN.
-		byte7	= aPGN & 0x000000FF;									// Grab LSB
+		byte7	= aPGN & 0x000000FF;									// Grab MSB
 	} else {																// Else? We're getting nutty parameters. Pull the plug.
 		success = false;												// This is NOT a success.
 		complete = true;												// We're done.
@@ -943,6 +996,8 @@ void xferNode::sendflowControlMsg(flowContType msgType,abortReason reason) {
 	flowContMsg.setDataByte(5,byte5);						//	Stuff pre-calculated PGN bytes in place.
 	flowContMsg.setDataByte(6,byte6);						// 
 	flowContMsg.setDataByte(7,byte7);						//
+	Serial.println("Sending flow control..");
+	flowContMsg.showMessage();
 	ourNetObj->outgoingingMsg(&flowContMsg);				// Off it goes!
 }
 
@@ -968,12 +1023,13 @@ outgoingBroadcast::outgoingBroadcast(message* inMsg,netObj* inNetObj,xferList* i
 	if (inMsg && inNetObj) {					// OK. As always, check sanity..
 		msgSize = inMsg->getNumBytes();		// Save off the size. (used later)
 		if (msgSize>8) {							// If its's too big..
-			saveFCID(inMsg);			// Save off the PGN for later.
+			saveFCID(inMsg);						// Save off the PGN for later.
 			msgData = inMsg->passData();		// Hands over the actual data to us. (Yes messages can do this.)
 			msgPacks = msgSize/7;				// Seven goes into num bytes.?.
 			if (msgSize%7) {						//	We got leftovers?
 				 msgPacks++;						// Then add one.
 			}											// (msgPack is used later.)
+			msgAddr = GLOBAL_ADDR;				// Send to.. Everyone?
 			sendflowControlMsg(BAM);			// Send a BAM message.
 			startTimer(TWMIN_MS,TWMAX_MS);	// We don't send another 'till the timer dings.
 			complete = false;						// Successfully started. So, not complete.
@@ -1047,22 +1103,6 @@ outgoingPeerToPeer::~outgoingPeerToPeer(void) {
 	}
 }
 
-/*
-// Filter out messages that we are not interested in or not even addressed to us. Or that
-// it actually IS a message. Or, that we are actually still accepting messages. So many
-// things to go wrong!
-bool outgoingPeerToPeer::isOurMsg(message* inMsg) {
-
-	if (!complete) {																// We're still running.
-		if (inMsg) {																// We don't handle null messages.
-			if (inMsg->getPDUf()==FLOW_CON_PF) {							// Only interested in flow control messages.
-				return(checkFCID(inMsg));							// Check our 3 saved bytes with these 3 from their data.
-			}
-		}
-	}
-	return false;
-}
-*/
 
 // Messages will be passed in for us to peruse. We'll filter out ones specifically for
 // ourselves and deal with them here. We'll return true if we dealt with the message.
@@ -1330,22 +1370,6 @@ xferList::~xferList(void) {  }
 void xferList::begin(netObj* inNetObj) { ourNetObj = inNetObj; }
 
 
-// Most transfer portocal message types have the multi packet PGN number stored in the
-// data section. This will decode that value for you.
-uint32_t xferList::getPGNFromTPData(message* inMsg) {
-
-	uint32_t aPGN;
-	
-	aPGN = 0;
-	aPGN = aPGN | inMsg->getDataByte(7);
-	aPGN = aPGN << 8;
-	aPGN = aPGN | inMsg->getDataByte(6);
-	aPGN = aPGN << 8;
-	aPGN = aPGN | inMsg->getDataByte(5);
-	return aPGN;
-}
-
-
 // Either we create a new outgoing extended message. Or, we received from the net a new
 // incoming extended message. Create the suitable handler node with the initial message
 // that started it. Then, add this new node to the xferNode list.
@@ -1359,12 +1383,14 @@ void xferList::addXfer(message* ioMsg,xferTypes xferType) {
 			newXferNode = (xferNode*) new incomingBroadcast(ioMsg,ourNetObj,this);
 		break;
 		case broadcastOut		:	// We created a "BAM message".
+			Serial.println("Creating a broadcast out");
 			newXferNode = (xferNode*) new outgoingBroadcast(ioMsg,ourNetObj,this);
 		break;
 		case peerToPeerIn		:	// We received a "request to send" from a peer.
 			newXferNode = (xferNode*) new incomingPeerToPeer(ioMsg,ourNetObj,this);
 		break;
 		case peerToPeerOut	:	// We created a "request to send" for a peer.
+			Serial.println("Creating a peer to peer out");
 			newXferNode = (xferNode*) new outgoingPeerToPeer(ioMsg,ourNetObj,this);
 		break;
 	}
@@ -1407,7 +1433,7 @@ bool xferList::handleMsg(message* ioMsg,bool received) {
 			if (ioMsg->getPDUf()==FLOW_CON_PF) {									// If it's an incoming TP message..
 				switch((int)ioMsg->getDataByte(0)) {
 					case reqToSend		:													// REQUEST TO SEND : New Peer to peer incoming.
-						PGN = getPGNFromTPData(ioMsg);								// Lets see what this TP is all about.
+						PGN = ioMsg->getData5PGN();									// Lets see what this TP is all about.
 						tempMsg.setPGN(PGN);												// Drop this PGN into our temp message so we can..
 						if (!tempMsg.isBroadcast()) {									// See if the multi packet message is peer to peer..
 							if (tempMsg.getPDUs()==ourNetObj->addr) {				// And it's to us.
@@ -1419,7 +1445,7 @@ bool xferList::handleMsg(message* ioMsg,bool received) {
 					case clearToSend	: handled = checkList(ioMsg); break;	// CLEAR TO SEND : Hand it to the list, done.
 					case endOfMsg		: handled = checkList(ioMsg); break;	// END OF MESSAGE : Hand it to the list, done.
 					case BAM				: 													// BROADCAST ANNOUNCE MESSGE : New broadcast incoming.
-						PGN = getPGNFromTPData(ioMsg);								// Lets see what this TP is all about.
+						PGN = ioMsg->getData5PGN();									// Lets see what this TP is all about.
 						tempMsg.setPGN(PGN);												// Drop this PGN into our temp message so we can..
 						if (tempMsg.isBroadcast()) {									// See if the multi packet message actually is a broadcast..
 							addXfer(ioMsg,broadcastIn);								// Setup a brodcast transfer.
@@ -1593,6 +1619,9 @@ void netObj::outgoingingMsg(message* outMsg) {
 // Fire off a process and this should give you a good idea when it's done.
 bool netObj::isBusy() {
 
+	if (ourState==config)				return true;	// Config state, shop's closed.
+	if (ourState==startHold)			return true;	// Hold means hold! As in "hold all calls!"
+	if (ourState==arbit)					return true;	// Arbitration is not a time to be pestering.
 	if (holdTimer.getFraction()!=1)	return true;	// Hold timer running? We're busy!
 	if (arbitTimer.getFraction()!=1) return true;	// Arbitration timer running? We're busy!
 	if (claimTimer.getFraction()!=1) return true;	// Claim timer running? We're busy!
@@ -1627,11 +1656,11 @@ void netObj::checkMessages(void) {
 	
 	aMsg = (msgObj*)ourMsgQ.pop();										// Pop off the next message object.
 	if (aMsg) {																	// If we got one..
-		if (isReqAddrClaim(aMsg)) {										// Is it an request address claim? "I want your address and name".
-			handleReqAdderClaim(aMsg);										// Do the request address claim dance.
+		if (isAddrClaimReq(aMsg)) {										// Is it a request address claim? "I want your address and name".
+			handelAddrClaimReq(aMsg);										// Do the request address claim dance.
 		}																			//
 		else if (isAddrClaim(aMsg)) {										// Else if it's an address claim? "I'm going to use this address. You ok with that?"
-			handleAdderClaim(aMsg);											// Check to see if they are trying to take our address. Deal with this!
+			handleAddrClaim(aMsg);											// Check to see if they are trying to take our address. Deal with this!
 		}																			// 
 		else if (isCantClaim(aMsg)) {										// Else if it's it's a can not claim an address?
 			handleCantClaim(aMsg);											// We.. Well, I donno'. I guess it may have been ours, and this is a confirmation we won?
@@ -1824,16 +1853,6 @@ void netObj::showAddrList(bool showNames) {
 }
 
 
-// Request address claimed. Someone is asking for everyone, or us, to show who they are
-// and what address they are holding at this moment.
-bool netObj::isReqAddrClaim(message* inMsg) {
-	
-	if (inMsg->getPDUf()==REQ_ADDR_CLAIM_PF && inMsg->getNumBytes()==3) {
-		return true;
-	}
-	return false;
-}
-
 
 // Address Claimed. Someone is telling the world that this is the address they are going
 // to use. If this conflicts with yours? Deal with that.
@@ -1864,29 +1883,95 @@ bool netObj::isCommandedAddr(message* inMsg) {
 }
 
 
-// We have a new message asking us, or everyone, what address we are and what our name is.
-void netObj::handleReqAdderClaim(message* inMsg) {
+// Request message have the PGN of their request stored in the first three bytes of their
+// data. This gets you that encoded PGN for you.
+uint32_t netObj::getRequestPGN(message* reqMsg) { return reqMsg->getData0PGN(); }
+
+
+// As said above. Request message have the PGN of their request stored in their first
+// three bytes of their data. This encodes and stores a PGN in the data for you.
+void netObj::setRequestPGN(uint32_t PGN, message* reqMsg) { reqMsg->setData0PGN(PGN); }
+
+
+void netObj::returnAck(ackType inType,int inAddr,uint32_t PGN) {
 	
-	switch(ourState) {
-		case arbit		:																		// Arbitrating
-		case running	:																		// Or running..
-			if (inMsg->getPDUs()==GLOBAL_ADDR || inMsg->getPDUs()==addr) {		// If sent to everyone or just us..
-				sendAddressClaimed(true,inMsg->getSourceAddr());					// We send our address & name.
-			}
+	message 	ackMsg;
+	
+	ackMsg.setPDUf(ACKNOWLEDGE_PF);		// Set the PDUf as your main message type.
+	ackMsg.setPDUs(inAddr);					// PDUs gets addr to send this to.
+	ackMsg.setPriority(DEF_PRIORITY);	// Default priority.
+	ackMsg.setSourceAddr(addr);			// Yup! Coming from us.
+	ackMsg.setDataByte(1,0);				// Group function value? Make it zero.
+	ackMsg.setDataByte(2,0);				// These two need to be zero as well.
+	ackMsg.setDataByte(3,0);				// ..zero..
+	ackMsg.setData5PGN(PGN);
+	switch(inType) {
+		case ack	:
+			ackMsg.setDataByte(0,0);		// Ack is zero.
 		break;
-		case addrErr	:																		// We failed to get an address.
-			if (inMsg->getPDUs()==GLOBAL_ADDR || inMsg->getPDUs()==addr) {		// If sent to everyone or just us..
-				sendCannotClaimAddress();													// We send null address & name.
-			}
+		case nack	:
+			ackMsg.setDataByte(0,1);		// NACM is one.
 		break;
-		default : break;
+		case denied	:
+			ackMsg.setDataByte(0,2);		// Denied! Is 2.
+		break;
+		case notNow	:
+			ackMsg.setDataByte(0,3);		// Can't you see I'm busy?! Is 3.
+		break;
 	}
+	outgoingingMsg(&ackMsg);				// And away it goes.	
 }
 
 
+// Is this a request message, either a broadcast or aimed at us?
+bool netObj::isRequestMsg(message* inMsg) {
+
+	uint8_t	reqAddr;
+	
+	if (inMsg) {																			// We got something.
+		if (inMsg->getPDUf()==REQUEST_PF && inMsg->getNumBytes()==3) {		// Correct type and size..
+			reqAddr = inMsg->getPDUs();												// Grab the address.
+			if (reqAddr==addr || reqAddr==GLOBAL_ADDR) {							// If it's to us, or a broadcast.
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+
+// Request address claimed. Someone is asking for everyone, or us, to show who they are
+// and what address they are holding at this moment.
+bool netObj::isAddrClaimReq(message* inMsg) {
+		
+	if (isRequestMsg(inMsg)) {								// Its a request broadcast or peer to peer at us.
+		return getRequestPGN(inMsg)==ADDR_CLAIMED;	// If they are asking for the address claimed PGN.																				//
+	}																//
+	return false;												// All other cases, false!
+}
+
+
+// We have a new message asking us to show our name and address.
+void netObj::handelAddrClaimReq(message* inMsg) {
+	
+	if (inMsg) {																// Standard sanity.
+		switch(ourState) {													// Depending on state, we can handle that.
+			case arbit		:													// Arbitrating
+			case running	:													// Or running..
+				sendAddressClaimed(true,inMsg->getSourceAddr());	// We send our address & name.
+			break;																//
+			case addrErr	:													// We failed to get an address.
+				sendCannotClaimAddress();									// We send null address & name.
+			break;																//
+			default : break;
+		}
+	}
+}
+	
+
 // We have a message telling us that someone claimed an address. Let's see if it's our
 // address they claimed. If so? We can send back and address claimed?
-void netObj::handleAdderClaim(message* inMsg) {
+void netObj::handleAddrClaim(message* inMsg) {
 
 	netName	aName;
 	byte		buff[8];
@@ -2065,8 +2150,6 @@ void netObj::sendAddressClaimed(bool tryFail,byte outAddr) {
 	}													//
 	ourMsg.setPGN(ADDR_CLAIMED);				// Set the PGN..
 	ourMsg.setPDUs(outAddr);					// Then set destination address as lower bits of PGN.
-	//Serial.println("Sending");
-	//ourMsg.showMessage();
 	outgoingingMsg(&ourMsg);					// Off it goes!													
 }
 
