@@ -155,8 +155,8 @@ class message {
 				int16_t	getIntFromData(int startIndex);						// Get a signed int from the data with correct byte ordering.
 				void		setUIntInData(int startIndex,uint16_t value);	// Put an unsigned int into the data with correct byte ordering.
 				uint16_t	getUIntFromData(int startIndex);						// Get an unsigned int from the data with correct byte ordering.
-				void		setLongInData(int startIndex,int32_t value);		// Put an unsigned long into the data with correct byte ordering.
-				int32_t	getLongFromData(int startIndex);						// Get an unsigned long from the data with correct byte ordering.
+				void		setLongInData(int startIndex,int32_t value);		// Put a signed long into the data with correct byte ordering.
+				int32_t	getLongFromData(int startIndex);						// Get a signed long from the data with correct byte ordering.
 				void		setULongInData(int startIndex,uint32_t value);	// Put an unsigned long into the data with correct byte ordering.
 				uint32_t	getULongFromData(int startIndex);					// Get an unsigned long from the data with correct byte ordering.
 				void		setData5PGN(uint32_t PGN);								// Different messages store PGNs in the data.
