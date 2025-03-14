@@ -321,11 +321,7 @@ void changeAnAddr(void) {
       Serial.print("Address to move : ");Serial.print(addr1);
       Serial.print("\nTo new location : ");Serial.println(addr2);
       tempName = llamaBrd.findName(addr1);
-      Serial.println("Name of device to be moved.");
-      tempName.showName();
-      Serial.println("Calling the move command now.");
       llamaBrd.addrCom(&tempName,addr2);
-      Serial.println("Call complete.");
    }
 }
 

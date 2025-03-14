@@ -895,7 +895,6 @@ xferNode::xferNode(netObj* inNetObj,xferList* inList)
 	success		= false;		// We start without success.
 	complete		= true;		// Let the offspring set this.
 	ourNetObj	= inNetObj;	// Save off our netObj pointer.
-	ourList		= inList;	// Save a pointer to our list manager thingy.
 	msgData		= NULL;		// Start all pointers we may allocate to NULL
 	byteTotal	= 0;			// None been sent. yet..
 	packNum		= 1;			// The packet number we'll be sending/expecting.
@@ -905,23 +904,6 @@ xferNode::xferNode(netObj* inNetObj,xferList* inList)
 // outData may have been used. If not NULL, we'll need to delete it.
 xferNode::~xferNode(void) {
 
-	/*
-	Serial.println("Transfer recycling report.");
-	Serial.print("Was I successful : ");
-	if (success)
-		Serial.println("Success");
-	else {
-		Serial.println("Fail");
-		Serial.print("With reason : ");
-		switch(reason) {
-			case notAbort			: Serial.println("notAbort");		break;
-			case busyAbort			: Serial.println("busyAbort");		break;
-			case resourceAbort	: Serial.println("resourceAbort");		break;
-			case timoutAbort		: Serial.println("timoutAbort");		break;
-			default 					: Serial.println("noReason");		break;
-		}
-	}
-	*/
 	if (msgData) {			// If someone set it..
 		free(msgData);		// We'll release it.
 		msgData = NULL;	// Flag it so no one else tries to release it.
@@ -1107,8 +1089,6 @@ void xferNode::sendflowControlMsg(flowContType msgType,abortReason reason) {
 	flowContMsg.setDataByte(5,byte5);						//	Stuff pre-calculated PGN bytes in place.
 	flowContMsg.setDataByte(6,byte6);						// 
 	flowContMsg.setDataByte(7,byte7);						//
-	Serial.println("Sending flow control..");
-	flowContMsg.showMessage();
 	ourNetObj->outgoingingMsg(&flowContMsg);				// Off it goes!
 }
 
@@ -1494,14 +1474,12 @@ void xferList::addXfer(message* ioMsg,xferTypes xferType) {
 			newXferNode = (xferNode*) new incomingBroadcast(ioMsg,ourNetObj,this);
 		break;
 		case broadcastOut		:	// We created a "BAM message".
-			Serial.println("Creating a broadcast out");
 			newXferNode = (xferNode*) new outgoingBroadcast(ioMsg,ourNetObj,this);
 		break;
 		case peerToPeerIn		:	// We received a "request to send" from a peer.
 			newXferNode = (xferNode*) new incomingPeerToPeer(ioMsg,ourNetObj,this);
 		break;
 		case peerToPeerOut	:	// We created a "request to send" for a peer.
-			Serial.println("Creating a peer to peer out");
 			newXferNode = (xferNode*) new outgoingPeerToPeer(ioMsg,ourNetObj,this);
 		break;
 	}
@@ -1682,7 +1660,6 @@ void netObj::begin(netName* inName,byte inAddr,addrCat inAddCat) {
 	setAddr(inAddr);							// Our initial address.
 	setAddrCat(inAddCat);					// Our method of handling address issues.
 	hookup();									// We are guaranteed to be in code section, so hookup.
-	ourAddrList.hookup();					// And hook up these guys as well.
 	ourXferList.hookup();					// That should do it..
 }
 

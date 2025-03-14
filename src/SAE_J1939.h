@@ -424,9 +424,8 @@ class netName {
 
 
 // When wondering if an address is unused? Who serves up the best data? Where something
-// should be sent? This is our internal list that show's everyone's address. for now it's
-// used for searching for unused address values. Later we can add the names, and then
-// it'll be a catalog.
+// should be sent? This is our internal list that show's everyone's address. Think of it
+// as a catalog of what's online.
 
 class addrNode :	public linkListObj {
 
@@ -443,8 +442,7 @@ class addrNode :	public linkListObj {
 
 
 
-class addrList :	public linkList,
-						public idler {
+class addrList :	public linkList {
 
 public:
 				addrList(void);
@@ -466,9 +464,11 @@ public:
 
 // [32] [Size LSB] [Size MSB] [numPacks] [0xFF] [PGN LSB] [PGN2] [PGN MSB]
 
-// This is work in progress. When needed to send more than eight bytes one needs to do a
-// multi message transmission. This list is to track what multi part messages that are
-// currently active. Either sending or receiving.
+// When needed to send more than eight bytes one needs to do a multi packet transmission.
+// This list is to track what multi part messages that are currently active. Either
+// sending or receiving. Think of each xferNode as if it were it's own message transfer
+// thread. There are four types of transfer. Ones we start ourselves, both broadcast and
+// peer to peer. And, one that come to us, both broadcast and peer to peer.
 
 
 // Our four types/starting points.
@@ -510,7 +510,7 @@ enum abortReason {
 // Abort values : 4..250 Are reserved by SAE for unknown reasons.
 // And values : 251..255 by J1939/71 for other unknown reasons.
 // They seem kinda' greedy in grabbing most of the pie. I guess we
-// should feel thankful for getting 4 of the values. :) 
+// should feel thankful for getting 4 whole values. :) 
 				
 				
 // Pure virtual base class to a transfer node. Think of it kinda' like a process thread.
@@ -537,7 +537,6 @@ class xferNode :	public linkListObj {
 				bool			success;			// success means that were able to assemble all the data without an error.
 				abortReason	reason;			// If we got an abort, this is the reason for it.
 				netObj*		ourNetObj;		// Pointer back to the big boss. For addresses and sending stuff.
-				xferList*	ourList;			// Pointer back to the list object we are managed by. Needed for the getPGNFromTPData() call.
 				timeObj		xFerTimer;		// For holding before sending and timeouts for receiving.
 				uint8_t		msgAddr;			// Their address. Ours is passed in.
 				byte*			msgData;			// Used for holding the data. In or out.
