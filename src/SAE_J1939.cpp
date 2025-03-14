@@ -1741,11 +1741,17 @@ void netObj::checkMessages(void) {
 	msgObj*			aMsg;
 	msgHandler*		trace;
 	bool				done;
+	bool				haveRequest;
 	
+	haveRequest = false;														// Well, we don't have one yet.
 	aMsg = (msgObj*)ourMsgQ.pop();										// Pop off the next message object.
 	if (aMsg) {																	// If we got one..
-		if (isAddrClaimReq(aMsg)) {										// Is it a request address claim? "I want your address and name".
-			handelAddrClaimReq(aMsg);										// Do the request address claim dance.
+		if (isRequestMsg(aMsg)) {											// We got a request message, broadcast or peer to peer.
+			if (isAddrClaimReq(aMsg)) {									// Is it a request address claim? "I want your address and name".
+				handelAddrClaimReq(aMsg);									// Do the request address claim dance.
+			} else {																//
+				haveRequest = true;											// We have a request that we've not delat with. We'll see if the added handlers will deal with it.
+			}																		//
 		}																			//
 		else if (isAddrClaim(aMsg)) {										// Else if it's an address claim? "I'm going to use this address. You ok with that?"
 			handleAddrClaim(aMsg);											// Check to see if they are trying to take our address. Deal with this!
@@ -1762,13 +1768,17 @@ void netObj::checkMessages(void) {
 				trace = (msgHandler*)getFirst();							// We go through our user's message handlers. Let them have a whack at it.
 				while(!done) {													// For ever handler..
 					if (trace) {												// If non-NULL..
-						if (trace->handleMsg(aMsg)) {						// Can you haled this?
+						if (trace->handleMsg(aMsg)) {						// Can you handled this?
+							haveRequest = false;								// If this was a request, they handled it.
 							done = true;										// If so? We are done.
 						} else {													// Else can't handle it?
 							trace = (msgHandler*)trace->getNext();		//	We grab the next handler on the list.
 						}															// And start all over.
 					} else {														// Else we hit a NULL?
 						done = true;											// In this case we are also done.
+						if (haveRequest) {									// Well, in case we have a request that is still waiting.
+							returnAck(nack,aMsg);							// No one dealt with this se we'll send a NACK.
+						}															//
 					}																//
 				}																	//
 			}																		//
@@ -1981,33 +1991,39 @@ uint32_t netObj::getRequestPGN(message* reqMsg) { return reqMsg->getData0PGN(); 
 void netObj::setRequestPGN(uint32_t PGN, message* reqMsg) { reqMsg->setData0PGN(PGN); }
 
 
-void netObj::returnAck(ackType inType,int inAddr,uint32_t PGN) {
+void netObj::returnAck(ackType inType,message* reqMsg) {
 	
 	message 	ackMsg;
+	byte		retAddr;
+	uint32_t	thePGN;
 	
-	ackMsg.setPDUf(ACKNOWLEDGE_PF);		// Set the PDUf as your main message type.
-	ackMsg.setPDUs(inAddr);					// PDUs gets addr to send this to.
-	ackMsg.setPriority(DEF_PRIORITY);	// Default priority.
-	ackMsg.setSourceAddr(addr);			// Yup! Coming from us.
-	ackMsg.setDataByte(1,0);				// Group function value? Make it zero.
-	ackMsg.setDataByte(2,0);				// These two need to be zero as well.
-	ackMsg.setDataByte(3,0);				// ..zero..
-	ackMsg.setData5PGN(PGN);
-	switch(inType) {
-		case ack	:
-			ackMsg.setDataByte(0,0);		// Ack is zero.
-		break;
-		case nack	:
-			ackMsg.setDataByte(0,1);		// NACM is one.
-		break;
-		case denied	:
-			ackMsg.setDataByte(0,2);		// Denied! Is 2.
-		break;
-		case notNow	:
-			ackMsg.setDataByte(0,3);		// Can't you see I'm busy?! Is 3.
-		break;
+	if (reqMsg->getPDUs()==addr) {			// Only bother if it's a peer to peer to us.
+		ackMsg.setPDUf(ACKNOWLEDGE_PF);		// Set the PDUf as your main message type.
+		retAddr = reqMsg->getSourceAddr();	// Grab the source address for this message's dest.
+		ackMsg.setPDUs(retAddr);				// PDUs gets addr to send this to.
+		ackMsg.setPriority(DEF_PRIORITY);	// Default priority.
+		ackMsg.setSourceAddr(addr);			// Yup! Coming from us.
+		ackMsg.setDataByte(1,0);				// Group function value? Make it zero.
+		ackMsg.setDataByte(2,0xFF);			// These two need to be all ones..
+		ackMsg.setDataByte(3,0xff);			// Maybe, depending on what doc. you read?
+		thePGN = reqMsg->getData0PGN();		// Request messages have the PGN stored at data 0.
+		ackMsg.setData5PGN(thePGN);			// Reply messages have that same PGN stored at data 5.
+		switch(inType) {
+			case ack	:
+				ackMsg.setDataByte(0,0);		// Ack is zero.
+			break;
+			case nack	:
+				ackMsg.setDataByte(0,1);		// NACK is one.
+			break;
+			case denied	:
+				ackMsg.setDataByte(0,2);		// Denied! Is 2.
+			break;
+			case notNow	:
+				ackMsg.setDataByte(0,3);		// Can't you see I'm busy?! Is 3.
+			break;
+		}
+		outgoingingMsg(&ackMsg);				// And away it goes.	
 	}
-	outgoingingMsg(&ackMsg);				// And away it goes.	
 }
 
 
@@ -2020,6 +2036,7 @@ bool netObj::isRequestMsg(message* inMsg) {
 		if (inMsg->getPDUf()==REQUEST_PF && inMsg->getNumBytes()==3) {		// Correct type and size..
 			reqAddr = inMsg->getPDUs();												// Grab the address.
 			if (reqAddr==addr || reqAddr==GLOBAL_ADDR) {							// If it's to us, or a broadcast.
+				
 				return true;
 			}
 		}

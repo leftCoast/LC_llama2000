@@ -741,7 +741,7 @@ class netObj :	public linkList,
 				
 				uint32_t getRequestPGN(message* reqMsg);												// Returns the PGN encoded in a request messages's data.
 				void		setRequestPGN(uint32_t PGN, message* reqMsg);							// Encodes a PGN into a request message's data.
-				void		returnAck(ackType inType,int inAddr,uint32_t PGN);
+				void		returnAck(ackType inType,message* reqMsg);								// Needed to acknowledge peer to peer requests.
 				bool		isRequestMsg(message* inMsg);													// Is this a request msg?
 				bool		isAddrClaimReq(message* inMsg);												// Is this specifically and address claim request, aimed at us?
 				void		handelAddrClaimReq(message* inMsg);											// Handle an address claimed msg.
