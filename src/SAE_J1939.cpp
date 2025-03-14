@@ -1,6 +1,6 @@
 #include <SAE_J1939.h>
 
-
+bool showReq = false;
 
 // The byte order is not the same as Arduino. It could be different than whatever YOU are
 // trying to use the for. So we have these two integer byte ordering routines to make life
@@ -8,12 +8,27 @@
 // lowByte slot etc.
 
 
-uint16_t pack16(byte hiByte,byte lowByte) {
+ struct int16 {
+   byte lowByte;
+   byte hiByte;
+};
+ 
+   
+int16_t pack16(byte hiByte,byte lowByte) {
   
-   struct int16 {
-      byte lowByte;
-      byte hiByte;
-   };
+   int16*	bytes;
+   int16_t	value;
+
+   value = 0;                    // Shut up compiler.
+   bytes = (int16*)&value;
+   bytes->lowByte = lowByte;
+   bytes->hiByte = hiByte;
+   return(value);
+}
+
+
+uint16_t packU16(byte hiByte,byte lowByte) {
+  
    int16*	bytes;
    uint16_t	value;
 
@@ -25,14 +40,31 @@ uint16_t pack16(byte hiByte,byte lowByte) {
 }
 
 
-uint32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
-  
-   struct int32 {
+ struct int32 {
       byte byte0;
       byte byte1;
       byte byte2;
       byte byte3;
    };
+   
+   
+int32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
+  
+   int32*   bytes;
+   int32_t value;
+
+   value = 0;                    // Shut up compiler.
+   bytes = (int32*)&value;
+   bytes->byte3 = hiByte;
+   bytes->byte2 = byte2;
+   bytes->byte1 = byte1;
+   bytes->byte0 = lowByte;
+   return(value);
+}
+
+
+uint32_t packU32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
+  
    int32*   bytes;
    uint32_t value;
 
@@ -45,8 +77,7 @@ uint32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
    return(value);
 }
 
-
-bool showReq = false;
+	
 	
 // ***************************************************************************************
 //				----- message class -----
@@ -238,6 +269,86 @@ void message::acceptData(byte* inData,int inNumBytes) {
 }
 
 
+// Put an int into the data buffer starting at index.
+void message::setIntInData(int index,int16_t value) {
+	
+	if (numBytes>=index+2) {
+		setDataByte(index,value & 0x00FF);
+		value = value >> 8;
+		setDataByte(index+1,value & 0x00FF);
+	}
+}
+
+// Put an unsigned int into the data buffer starting at index.
+void message::setUIntInData(int index,uint16_t value) {
+	
+	if (numBytes>=index+2) {
+		setDataByte(index,value & 0x00FF);
+		value = value >> 8;
+		setDataByte(index+1,value & 0x00FF);
+	}
+}
+
+
+// Grab an int from the data buffer starting at index.
+int16_t message::getIntFromData(int index) {
+	
+	return pack16(getDataByte(index+1),getDataByte(index));
+}
+
+
+// Grab an unsigned int from the data buffer starting at index.
+uint16_t message::getUIntFromData(int index) {
+	
+	return pack16(getDataByte(index+1),getDataByte(index));
+}
+
+
+// Put a long into the data with correct byte ordering. Starting at byte index.
+void message::setLongInData(int index,int32_t value) {
+
+	if (numBytes>=index+4) {
+		setDataByte(index,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(index+1,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(index+2,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(index+3,value & 0x000000FF);
+	}
+}
+
+
+// Put an unsigned long into the data with correct byte ordering. Starting at byte index.
+void message::setULongInData(int index,uint32_t value) {
+
+	if (numBytes>=index+4) {
+		setDataByte(index,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(index+1,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(index+2,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(index+3,value & 0x000000FF);
+	}
+}
+
+
+// Get a long from the data with correct byte ordering. Starting at index.
+int32_t message::getLongFromData(int index) {
+
+	return pack32(getDataByte(index+3),getDataByte(index+2),getDataByte(index+1),getDataByte(index));
+}
+
+
+// Get an unsigned long from the data with correct byte ordering. Starting at index.
+uint32_t message::getULongFromData(int index) {
+
+	return pack32(getDataByte(index+3),getDataByte(index+2),getDataByte(index+1),getDataByte(index));
+}
+
+
+				
 // Starting at data byte 5 store a 3 byte version of this PGN.
 void message::setData5PGN(uint32_t PGN) {
 	
