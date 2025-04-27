@@ -707,6 +707,7 @@ void  netName::showManuf(int manuf) {
 		case 35	: Serial.println("Left coast #1");			break;
 		case 73	: Serial.println("Left coast #2");			break;
 		case 135	: Serial.println("Airmar"); 					break;
+		case 137	: Serial.println("Maretron"); 				break;
 		case 381 : Serial.println("B&G");						break;
 		case 644	: Serial.println("Wema U.S.A dba KUS");	break;
 		case 717	: Serial.println("Yacht Devices");			break;
