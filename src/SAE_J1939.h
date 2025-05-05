@@ -308,7 +308,7 @@ enum indGroup {
 #define	DEV_FUNC_SP_DEPTH		135	// Bottom Depth/Speed
 #define	DEV_FUNC_SP_DP_TEMP	136	// Bottom Depth/Speed/Temperature
 #define	DEV_FUNC_ATTITUDE		140	// Ownship Attitude
-#define	DEV_FUNC_GNSS			145	// Ownship Position (GNSS)
+#define	DEV_FUNC_GNSS			145	// Ownship Position (GPS)
 #define	DEV_FUNC_LORAN 		150	// Ownship Position (Loran C)
 #define	DEV_FUNC_SPEED			155	// Speed
 #define	DEV_FUNC_TURN_RATE	160	// Turn Rate Indicator
@@ -718,7 +718,7 @@ class netObj :	public linkList,
 				netObj(void);
 	virtual	~netObj(void);
 	
-	virtual	void		begin(netName* inName,byte inAddr,addrCat inAddCat);					// ** YOU WILL NEED TO CALL THIS BEFORE USE ** - Initial setup.
+	virtual	void		begin(byte inAddr,addrCat inAddCat);										// ** YOU WILL NEED TO CALL THIS BEFORE USE ** - Initial setup.
 	virtual	void		addMsgHandler(msgHandler* inCA);												// ** USE THIS TO ADD YOUR HANDLER OBJECTS FOR THE MESSAGEDS YOU WANT TO SEND/RECEIVE **
 	virtual  void		sendMsg(message* outMsg)=0;													// ** YOU WRITE THIS ONE TO SEND 8 BYTE OR SMALLER MESSAGES. DON'T CALL IT! **
 	virtual  void		incomingMsg(message* inMsg);													// ** WHEN A MESSAGE COMES IN FROM THE HARDWARE, PASS IT IN HERE. **

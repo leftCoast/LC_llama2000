@@ -1654,12 +1654,11 @@ netObj::~netObj(void) {  }
 
 
 // Things we can do to set up shop once we are actually post globals and running in code.
-void netObj::begin(netName* inName,byte inAddr,addrCat inAddCat) {
+void netObj::begin(byte inAddr,addrCat inAddrCat) {
 
 	ourXferList.begin(this);				// The xferList needs a pointer to us. Here 'tis.
-	copyName(inName);							// We get our name info and copy it to ourselves.
 	setAddr(inAddr);							// Our initial address.
-	setAddrCat(inAddCat);					// Our method of handling address issues.
+	setAddrCat(inAddrCat);					// Our method of handling address issues.
 	hookup();									// We are guaranteed to be in code section, so hookup.
 	ourXferList.hookup();					// That should do it..
 }
