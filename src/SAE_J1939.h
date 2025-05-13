@@ -111,6 +111,8 @@ int16_t pack16(byte hiByte,byte lowByte);
 uint16_t packU16(byte hiByte,byte lowByte);
 int32_t pack32(byte hiByte,byte byte2,byte byte1,byte lowByte);
 uint32_t packU32(byte hiByte,byte byte2,byte byte1,byte lowByte);
+int64_t pack64(byte hiByte,byte byte6,byte byte5,byte byte4,byte byte3,byte byte2,byte byte1, byte lowByte);
+uint64_t packU64(byte hiByte,byte byte6,byte byte5,byte byte4,byte byte3,byte byte2,byte byte1, byte lowByte);
 
 
 extern bool showReq;
@@ -118,7 +120,6 @@ extern bool showReq;
 // ***************************************************************************************
 //				----- message -----
 // ***************************************************************************************
-
 
 class message {
 
@@ -151,14 +152,25 @@ class message {
 				byte*		peekData(void);
 				byte*		passData(void);
 				void		acceptData(byte* inData,int inNumBytes);
+				
 				void		setIntInData(int startIndex,int16_t value);		// Put a signed int into the data with correct byte ordering.
 				int16_t	getIntFromData(int startIndex);						// Get a signed int from the data with correct byte ordering.
+				
 				void		setUIntInData(int startIndex,uint16_t value);	// Put an unsigned int into the data with correct byte ordering.
 				uint16_t	getUIntFromData(int startIndex);						// Get an unsigned int from the data with correct byte ordering.
+				
 				void		setLongInData(int startIndex,int32_t value);		// Put a signed long into the data with correct byte ordering.
 				int32_t	getLongFromData(int startIndex);						// Get a signed long from the data with correct byte ordering.
+				
 				void		setULongInData(int startIndex,uint32_t value);	// Put an unsigned long into the data with correct byte ordering.
 				uint32_t	getULongFromData(int startIndex);					// Get an unsigned long from the data with correct byte ordering.
+				
+				void		setDLongInData(int startIndex,int64_t value);		// Put a signed long into the data with correct byte ordering.
+				int64_t	getDLongFromData(int startIndex);						// Get a signed long from the data with correct byte ordering.
+				
+				void		setDULongInData(int startIndex,uint64_t value);	// Put an unsigned long into the data with correct byte ordering.
+				uint64_t	getDULongFromData(int startIndex);					// Get an unsigned long from the data with correct byte ordering.
+				
 				void		setData5PGN(uint32_t PGN);								// Different messages store PGNs in the data.
 				uint32_t getData5PGN(void);										// Some do it in data 5,6,7
 				void		setData0PGN(uint32_t PGN);								// Some do it in data 0,1,2

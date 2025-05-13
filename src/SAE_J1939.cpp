@@ -77,7 +77,58 @@ uint32_t packU32(byte hiByte,byte byte2,byte byte1,byte lowByte) {
    return(value);
 }
 
-	
+
+struct int64 {
+	byte byte0;
+	byte byte1;
+	byte byte2;
+	byte byte3;
+	byte byte4;
+	byte byte5;
+	byte byte6;
+	byte byte7;
+};
+   
+   
+int64_t pack64(byte hiByte,byte byte6,byte byte5,byte byte4,byte byte3,byte byte2,byte byte1, byte lowByte) {
+
+	int64*   bytes;
+   int64_t 	value;
+
+   value = 0;                    // Shut up compiler.
+   bytes = (int64*)&value;
+   bytes->byte3 = hiByte;
+   bytes->byte6 = byte6;
+   bytes->byte5 = byte5;
+   bytes->byte4 = byte4;
+   bytes->byte3 = byte3;
+ 	bytes->byte2 = byte2;
+   bytes->byte1 = byte1;
+   bytes->byte0 = lowByte;
+   return(value);
+}
+
+
+uint64_t packU64(byte hiByte,byte byte6,byte byte5,byte byte4,byte byte3,byte byte2,byte byte1, byte lowByte) {
+
+	int64*	bytes;
+   uint64_t	value;
+
+   value = 0;                    // Shut up compiler.
+   bytes = (int64*)&value;
+   bytes->byte3 = hiByte;
+   bytes->byte6 = byte6;
+   bytes->byte5 = byte5;
+   bytes->byte4 = byte4;
+   bytes->byte3 = byte3;
+ 	bytes->byte2 = byte2;
+   bytes->byte1 = byte1;
+   bytes->byte0 = lowByte;
+   return(value);
+}
+
+
+uint64_t packU64(byte hiByte,byte byte6,byte byte5,byte byte4,byte byte3,byte byte2,byte byte1, byte lowByte);
 	
 // ***************************************************************************************
 //				----- message class -----
