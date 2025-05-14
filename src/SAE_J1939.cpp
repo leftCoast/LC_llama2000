@@ -321,83 +321,143 @@ void message::acceptData(byte* inData,int inNumBytes) {
 
 
 // Put an int into the data buffer starting at index.
-void message::setIntInData(int index,int16_t value) {
+void message::setIntInData(int startIndex,int16_t value) {
 	
-	if (numBytes>=index+2) {
-		setDataByte(index,value & 0x00FF);
+	if (numBytes>=startIndex+2) {
+		setDataByte(startIndex,value & 0x00FF);
 		value = value >> 8;
-		setDataByte(index+1,value & 0x00FF);
+		setDataByte(startIndex+1,value & 0x00FF);
 	}
 }
 
 // Put an unsigned int into the data buffer starting at index.
-void message::setUIntInData(int index,uint16_t value) {
+void message::setUIntInData(int startIndex,uint16_t value) {
 	
-	if (numBytes>=index+2) {
-		setDataByte(index,value & 0x00FF);
+	if (numBytes>=startIndex+2) {
+		setDataByte(startIndex,value & 0x00FF);
 		value = value >> 8;
-		setDataByte(index+1,value & 0x00FF);
+		setDataByte(startIndex+1,value & 0x00FF);
 	}
 }
 
 
 // Grab an int from the data buffer starting at index.
-int16_t message::getIntFromData(int index) {
+int16_t message::getIntFromData(int startIndex) {
 	
-	return pack16(getDataByte(index+1),getDataByte(index));
+	return pack16(getDataByte(startIndex+1),getDataByte(startIndex));
 }
 
 
-// Grab an unsigned int from the data buffer starting at index.
-uint16_t message::getUIntFromData(int index) {
+// Grab an unsigned int from the data buffer starting at startIndex.
+uint16_t message::getUIntFromData(int startIndex) {
 	
-	return pack16(getDataByte(index+1),getDataByte(index));
+	return pack16(getDataByte(startIndex+1),getDataByte(startIndex));
 }
 
 
-// Put a long into the data with correct byte ordering. Starting at byte index.
-void message::setLongInData(int index,int32_t value) {
+// Put a long into the data with correct byte ordering. Starting at byte startIndex.
+void message::setLongInData(int startIndex,int32_t value) {
 
-	if (numBytes>=index+4) {
-		setDataByte(index,value & 0x000000FF);
+	if (numBytes>=startIndex+4) {
+		setDataByte(startIndex,value & 0x000000FF);
 		value = value >> 8;
-		setDataByte(index+1,value & 0x000000FF);
+		setDataByte(startIndex+1,value & 0x000000FF);
 		value = value >> 8;
-		setDataByte(index+2,value & 0x000000FF);
+		setDataByte(startIndex+2,value & 0x000000FF);
 		value = value >> 8;
-		setDataByte(index+3,value & 0x000000FF);
+		setDataByte(startIndex+3,value & 0x000000FF);
 	}
 }
 
 
-// Put an unsigned long into the data with correct byte ordering. Starting at byte index.
-void message::setULongInData(int index,uint32_t value) {
+// Put an unsigned long into the data with correct byte ordering. Starting at byte startIndex.
+void message::setULongInData(int startIndex,uint32_t value) {
 
-	if (numBytes>=index+4) {
-		setDataByte(index,value & 0x000000FF);
+	if (numBytes>=startIndex+4) {
+		setDataByte(startIndex,value & 0x000000FF);
 		value = value >> 8;
-		setDataByte(index+1,value & 0x000000FF);
+		setDataByte(startIndex+1,value & 0x000000FF);
 		value = value >> 8;
-		setDataByte(index+2,value & 0x000000FF);
+		setDataByte(startIndex+2,value & 0x000000FF);
 		value = value >> 8;
-		setDataByte(index+3,value & 0x000000FF);
+		setDataByte(startIndex+3,value & 0x000000FF);
 	}
 }
 
 
-// Get a long from the data with correct byte ordering. Starting at index.
-int32_t message::getLongFromData(int index) {
+// Get a long from the data with correct byte ordering. Starting at startIndex.
+int32_t message::getLongFromData(int startIndex) {
 
-	return pack32(getDataByte(index+3),getDataByte(index+2),getDataByte(index+1),getDataByte(index));
+	return pack32(getDataByte(startIndex+3),getDataByte(startIndex+2),getDataByte(startIndex+1),getDataByte(startIndex));
 }
 
 
-// Get an unsigned long from the data with correct byte ordering. Starting at index.
-uint32_t message::getULongFromData(int index) {
+// Get an unsigned long from the data with correct byte ordering. Starting at startIndex.
+uint32_t message::getULongFromData(int startIndex) {
 
-	return pack32(getDataByte(index+3),getDataByte(index+2),getDataByte(index+1),getDataByte(index));
+	return packU32(getDataByte(startIndex+3),getDataByte(startIndex+2),getDataByte(startIndex+1),getDataByte(startIndex));
 }
 
+
+// Put a signed double long into the data with correct byte ordering.
+void message::setDLongInData(int startIndex,int64_t value) {
+
+	if (numBytes>=startIndex+8) {
+		setDataByte(startIndex,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+1,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+2,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+3,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+4,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+5,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+6,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+7,value & 0x000000FF);
+	}
+}
+
+
+
+// Get a signed double long from the data with correct byte ordering.
+int64_t message::getDLongFromData(int startIndex) {
+	
+	return pack64(getDataByte(startIndex+7),getDataByte(startIndex+6),getDataByte(startIndex+5),getDataByte(startIndex+4),getDataByte(startIndex+3),getDataByte(startIndex+2),getDataByte(startIndex+1),getDataByte(startIndex));
+}					
+			
+			
+// Put an unsigned long into the data with correct byte ordering.	
+void message::setDULongInData(int startIndex,uint64_t value)  {
+
+	if (numBytes>=startIndex+8) {
+		setDataByte(startIndex,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+1,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+2,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+3,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+4,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+5,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+6,value & 0x000000FF);
+		value = value >> 8;
+		setDataByte(startIndex+7,value & 0x000000FF);
+	}
+}	
+
+
+// Get an unsigned long from the data with correct byte ordering.
+uint64_t message::getDULongFromData(int startIndex)  {
+	
+	return packU64(getDataByte(startIndex+7),getDataByte(startIndex+6),getDataByte(startIndex+5),getDataByte(startIndex+4),getDataByte(startIndex+3),getDataByte(startIndex+2),getDataByte(startIndex+1),getDataByte(startIndex));
+}
 
 				
 // Starting at data byte 5 store a 3 byte version of this PGN.

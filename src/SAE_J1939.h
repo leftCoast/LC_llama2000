@@ -164,9 +164,9 @@ class message {
 				
 				void		setULongInData(int startIndex,uint32_t value);	// Put an unsigned long into the data with correct byte ordering.
 				uint32_t	getULongFromData(int startIndex);					// Get an unsigned long from the data with correct byte ordering.
-				
-				void		setDLongInData(int startIndex,int64_t value);		// Put a signed long into the data with correct byte ordering.
-				int64_t	getDLongFromData(int startIndex);						// Get a signed long from the data with correct byte ordering.
+							
+				void		setDLongInData(int startIndex,int64_t value);	// Put a signed double long into the data with correct byte ordering.
+				int64_t	getDLongFromData(int startIndex);					// Get a signed double long from the data with correct byte ordering.
 				
 				void		setDULongInData(int startIndex,uint64_t value);	// Put an unsigned long into the data with correct byte ordering.
 				uint64_t	getDULongFromData(int startIndex);					// Get an unsigned long from the data with correct byte ordering.
