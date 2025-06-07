@@ -835,11 +835,33 @@ void netName::showName(void) {
 	Serial.print("Funct. Inst.    : "); Serial.println(getFunctInst());	// What # of your thing are you?
 	Serial.print("Actual Funct.   : "); Serial.println(getFunction());	// Depth transducer. Or whatever.
 																								// Some spare bit here..
-	Serial.print("Kind of Funct.  : "); Serial.println(getVehSys());		//	We are an..?
+	Serial.print("Kind of Funct.  : ");												//	We are an..?
+	Serial.print(getVehSys());	Serial.print("\t");	
+	switch(getVehSys()) {
+		case DEV_CLASS_RES			: Serial.println("Reserved for NMEA2K Use?");			break;
+		case DEV_CLASS_SYS_TOOLS	: Serial.println("System tools");							break;
+		case DEV_CLASS_SAFETY		: Serial.println("Safety systems");							break;
+		case DEV_CLASS_NETWRK		: Serial.println("Internetwork device");					break;
+		case DEV_CLASS_ELEC_DIST	: Serial.println("Electrical Distribution");				break;
+		case DEV_CLASS_ELEC_GEN		: Serial.println("Electrical Generation");				break;
+		case DEV_CLASS_CONTROL		: Serial.println("Steering and Control surfaces");		break;
+		case DEV_CLASS_PROPEL		: Serial.println("Propulsion");								break;
+		case DEV_CLASS_NAV			: Serial.println("Navigation");								break;
+		case DEV_CLASS_COMS			: Serial.println("Communication");							break;
+		case DEV_CLASS_SENSE_COM	: Serial.println("Sensor, Interface");						break;
+		case DEV_CLASS_INST			: Serial.println("Instrumentation/general systems");	break;
+		case DEV_CLASS_EXT_ENV		: Serial.println("External Environment");					break;
+		case DEV_CLASS_INT_ENV		: Serial.println("Internal Environment");					break;
+		case DEV_CLASS_DECK_EQP		: Serial.println("Deck, cargo, fishing systems");		break;
+		case DEV_CLASS_UI				: Serial.println("User Interface");							break;
+		case DEV_CLASS_DISP			: Serial.println("Display");									break;
+		case DEV_CLASS_ENT			: Serial.println("Entertainment");							break;
+		default							: Serial.println("Odd one, I have no clue.");			break;
+	}
 	Serial.print("Item Inst.      : "); Serial.println(getSystemInst());	// We are the ? of our device class.
 	Serial.print("Industry group  : "); 											// What kind of machine are we ridin' on?
+	Serial.print(getIndGroup());	Serial.print("\t");
 	switch(getIndGroup()) {
-		
 		case Global			: Serial.println("Global");			break;
 		case Highway		: Serial.println("Highway");			break;
 		case Agriculture	: Serial.println("Agriculture");		break;
@@ -858,7 +880,6 @@ void netName::showName(void) {
 	}
 	Serial.println();
 }
-
 
 
 // ***************************************************************************************
