@@ -378,7 +378,7 @@ enum indGroup {
 
 // DEV_CLASS_DISP
 #define	DEV_FUNC_DISP			130	// Display
-#define	DEV_FUNC_ALARM			40	// Alarm Enunciator
+#define	DEV_FUNC_ALARM			40		// Alarm Enunciator
 
 // DEV_CLASS_ENT
 #define	DEV_FUNC_PLAYER		130	// Multimedia Player
@@ -731,7 +731,7 @@ class netObj :	public linkList,
 	virtual	~netObj(void);
 	
 	virtual	void		begin(byte inAddr,addrCat inAddCat);										// ** YOU WILL NEED TO CALL THIS BEFORE USE ** - Initial setup.
-	virtual	void		addMsgHandler(msgHandler* inCA);												// ** USE THIS TO ADD YOUR HANDLER OBJECTS FOR THE MESSAGEDS YOU WANT TO SEND/RECEIVE **
+	virtual	void		addMsgHandler(msgHandler* inHanldler);										// ** USE THIS TO ADD YOUR HANDLER OBJECTS FOR THE MESSAGEDS YOU WANT TO SEND/RECEIVE **
 	virtual  void		sendMsg(message* outMsg)=0;													// ** YOU WRITE THIS ONE TO SEND 8 BYTE OR SMALLER MESSAGES. DON'T CALL IT! **
 	virtual  void		incomingMsg(message* inMsg);													// ** WHEN A MESSAGE COMES IN FROM THE HARDWARE, PASS IT IN HERE. **
 	virtual  void		outgoingingMsg(message* inMsg);												// ** USE THIS TO SEND MESSAGES ** IT CAN HANDLE >8 BYTE MESSAGES AND WILL CALL sendMsg() FOR YOU.
