@@ -2195,7 +2195,8 @@ void netObj::handelAddrClaimReq(message* inMsg) {
 		switch(ourState) {													// Depending on state, we can handle that.
 			case arbit		:													// Arbitrating
 			case running	:													// Or running..
-				sendAddressClaimed(true,inMsg->getSourceAddr());	// We send our address & name.
+				//sendAddressClaimed(true,inMsg->getSourceAddr());	// We send our address & name.
+				sendAddressClaimed(true);									// We BROADCAST our address & name.
 			break;																//
 			case addrErr	:													// We failed to get an address.
 				sendCannotClaimAddress();									// We send null address & name.
