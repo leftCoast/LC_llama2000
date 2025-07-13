@@ -815,8 +815,7 @@ void netName::setID(uint32_t value) {
 void  netName::showManuf(int manuf) {
 	
 	switch(manuf) {
-		case 35	: Serial.println("Left coast #1");			break;
-		case 73	: Serial.println("Left coast #2");			break;
+		case 35	: Serial.println("Left coast");				break;
 		case 135	: Serial.println("Airmar"); 					break;
 		case 137	: Serial.println("Maretron"); 				break;
 		case 381 : Serial.println("B&G");						break;
