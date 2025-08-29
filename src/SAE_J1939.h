@@ -814,7 +814,7 @@ class msgHandler :	public linkListObj {
 	virtual  void	newMsg(void);						// Fill in to create messages.
 	virtual  void	sendMsg(message* inMsg);		// This one just sends messages on their way.
 	
-				void	setSendInterval(float inMs);	// Used for broadcasting.
+				void	setSendInterval(float inMs);	// Used for broadcasting. (Zero for off)
             float	getSendInterval(void);			//
 	virtual	void	idleTime(void);					// Same as idle, but called by the netObj.
 				

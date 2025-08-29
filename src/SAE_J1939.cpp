@@ -2497,6 +2497,7 @@ void msgHandler::sendMsg(message* inMsg) { ourNetObj->outgoingingMsg(inMsg); }
 
 
 // Broadcasting typically is done on a clock. Set the time interval with this call.
+// Setting it to zero turns off broadcasting.
 void msgHandler::setSendInterval(float inMs) {
 
    if (inMs>0) {
