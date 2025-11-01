@@ -596,7 +596,7 @@ netName::netName(void) {
 	setFunctInst(0);						// First transducer.
 	setFunction(DEV_FUNC_GP_TRANS);	// General purpose transducer.
 												// Some spare bit here..
-	setVehSys(DEV_CLASS_INST);			//	We are an instrument.
+	setVehSys(DEV_SYSTEM_INST);		//	We are an instrument.
 	setSystemInst(0);						// We are the first of our device class.
 	setIndGroup(Marine);					// What kind of machine are we ridin' on?
 	//setArbitraryAddrBit(?);			// Will be set when we choose our addressing mode.
@@ -837,24 +837,24 @@ void netName::showName(void) {
 	Serial.print("Kind of Funct.  : ");												//	We are an..?
 	Serial.print(getVehSys());	Serial.print("\t");	
 	switch(getVehSys()) {
-		case DEV_CLASS_RES			: Serial.println("Reserved for NMEA2K Use?");			break;
-		case DEV_CLASS_SYS_TOOLS	: Serial.println("System tools");							break;
-		case DEV_CLASS_SAFETY		: Serial.println("Safety systems");							break;
-		case DEV_CLASS_NETWRK		: Serial.println("Internetwork device");					break;
-		case DEV_CLASS_ELEC_DIST	: Serial.println("Electrical Distribution");				break;
-		case DEV_CLASS_ELEC_GEN		: Serial.println("Electrical Generation");				break;
-		case DEV_CLASS_CONTROL		: Serial.println("Steering and Control surfaces");		break;
-		case DEV_CLASS_PROPEL		: Serial.println("Propulsion");								break;
-		case DEV_CLASS_NAV			: Serial.println("Navigation");								break;
-		case DEV_CLASS_COMS			: Serial.println("Communication");							break;
-		case DEV_CLASS_SENSE_COM	: Serial.println("Sensor, Interface");						break;
-		case DEV_CLASS_INST			: Serial.println("Instrumentation/general systems");	break;
-		case DEV_CLASS_EXT_ENV		: Serial.println("External Environment");					break;
-		case DEV_CLASS_INT_ENV		: Serial.println("Internal Environment");					break;
-		case DEV_CLASS_DECK_EQP		: Serial.println("Deck, cargo, fishing systems");		break;
-		case DEV_CLASS_UI				: Serial.println("User Interface");							break;
-		case DEV_CLASS_DISP			: Serial.println("Display");									break;
-		case DEV_CLASS_ENT			: Serial.println("Entertainment");							break;
+		case DEV_SYSTEM_RES			: Serial.println("Reserved for NMEA2K Use?");			break;
+		case DEV_SYSTEM_SYS_TOOLS	: Serial.println("System tools");							break;
+		case DEV_SYSTEM_SAFETY		: Serial.println("Safety systems");							break;
+		case DEV_SYSTEM_NETWRK		: Serial.println("Internetwork device");					break;
+		case DEV_SYSTEM_ELEC_DIST	: Serial.println("Electrical Distribution");				break;
+		case DEV_SYSTEM_ELEC_GEN		: Serial.println("Electrical Generation");				break;
+		case DEV_SYSTEM_CONTROL		: Serial.println("Steering and Control surfaces");		break;
+		case DEV_SYSTEM_PROPEL		: Serial.println("Propulsion");								break;
+		case DEV_SYSTEM_NAV			: Serial.println("Navigation");								break;
+		case DEV_SYSTEM_COMS			: Serial.println("Communication");							break;
+		case DEV_SYSTEM_SENSE_COM	: Serial.println("Sensor, Interface");						break;
+		case DEV_SYSTEM_INST			: Serial.println("Instrumentation/general systems");	break;
+		case DEV_SYSTEM_EXT_ENV		: Serial.println("External Environment");					break;
+		case DEV_SYSTEM_INT_ENV		: Serial.println("Internal Environment");					break;
+		case DEV_SYSTEM_DECK_EQP		: Serial.println("Deck, cargo, fishing systems");		break;
+		case DEV_SYSTEM_UI				: Serial.println("User Interface");							break;
+		case DEV_SYSTEM_DISP			: Serial.println("Display");									break;
+		case DEV_SYSTEM_ENT			: Serial.println("Entertainment");							break;
 		default							: Serial.println("Odd one, I have no clue.");			break;
 	}
 	Serial.print("Item Inst.      : "); Serial.println(getSystemInst());	// We are the ? of our device class.

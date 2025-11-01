@@ -7,7 +7,7 @@
 #include <resizeBuff.h>
 
 // If you are reading this and wondering what the heck it all means? Buy this book.
-
+//
 // A Comprehensible Guide to J1939 
 // By Wilfred Voss.
 //
@@ -224,41 +224,41 @@ enum indGroup {
 
 // Device Class values. These values are NOT uniform. So, we'll do the #define thing.
 
-#define	DEV_CLASS_RES			0		// Reserved for 2000 Use
-#define	DEV_CLASS_SYS_TOOLS	10		// System tools
-#define	DEV_CLASS_SAFETY		20		// Safety systems
-#define	DEV_CLASS_NETWRK		25		// Internetwork device
-#define	DEV_CLASS_ELEC_DIST	30		// Electrical Distribution
-#define	DEV_CLASS_ELEC_GEN	35		// Electrical Generation
-#define	DEV_CLASS_CONTROL		40		// Steering and Control surfaces
-#define	DEV_CLASS_PROPEL		50		// Propulsion
-#define	DEV_CLASS_NAV			60		// Navigation
-#define	DEV_CLASS_COMS			70		// Communication
-#define	DEV_CLASS_SENSE_COM  75		// Sensor Communication Interface
-#define	DEV_CLASS_INST			80		// Instrumentation/general systems
-#define	DEV_CLASS_EXT_ENV		85		// External Environment
-#define	DEV_CLASS_INT_ENV		90		// Internal Environment
-#define	DEV_CLASS_DECK_EQP	100	// Deck + cargo + fishing equipment systems
-#define	DEV_CLASS_UI			110	// User Interface
-#define	DEV_CLASS_DISP			120	// Display
-#define	DEV_CLASS_ENT			125	// Entertainment
+#define	DEV_SYSTEM_RES			0		// Reserved for 2000 Use
+#define	DEV_SYSTEM_SYS_TOOLS	10		// System tools
+#define	DEV_SYSTEM_SAFETY		20		// Safety systems
+#define	DEV_SYSTEM_NETWRK		25		// Internetwork device
+#define	DEV_SYSTEM_ELEC_DIST	30		// Electrical Distribution
+#define	DEV_SYSTEM_ELEC_GEN	35		// Electrical Generation
+#define	DEV_SYSTEM_CONTROL	40		// Steering and Control surfaces
+#define	DEV_SYSTEM_PROPEL		50		// Propulsion
+#define	DEV_SYSTEM_NAV			60		// Navigation
+#define	DEV_SYSTEM_COMS		70		// Communication
+#define	DEV_SYSTEM_SENSE_COM 75		// Sensor Communication Interface
+#define	DEV_SYSTEM_INST		80		// Instrumentation/general systems
+#define	DEV_SYSTEM_EXT_ENV	85		// External Environment
+#define	DEV_SYSTEM_INT_ENV	90		// Internal Environment
+#define	DEV_SYSTEM_DECK_EQP	100	// Deck + cargo + fishing equipment systems
+#define	DEV_SYSTEM_UI			110	// User Interface
+#define	DEV_SYSTEM_DISP		120	// Display
+#define	DEV_SYSTEM_ENT			125	// Entertainment
 
 
 // Device function.. OH lord! These are listed by.. Device Class. They are like the low
 // order byte of device.
 
-//  DEV_CLASS_SYS_TOOLS
+//  DEV_SYSTEM_SYS_TOOLS
 #define	DEV_FUNC_DIAG			130	// Diagnostic.
 #define	DEV_FUNC_LOGGER		140	// Bus Traffic Logger.
 
-// DEV_CLASS_SAFETY
+// DEV_SYSTEM_SAFETY
 #define	DEV_FUNC_ENC			110	// Alarm Enunciator.
 #define	DEV_FUNC_EPIRB			130	// Emergency Position Indicating Radio Beacon (EPIRB)
 #define	DEV_FUNC_OVERBOARD	135	// Man Overboard
 #define	DEV_FUNC_DATA_LOG		140	// Voyage Data Recorder
 #define	DEV_FUNC_CAMERA		150	// Camera
 
-// DEV_CLASS_NETWRK
+// DEV_SYSTEM_NETWRK
 #define	DEV_FUNC_GATE			130	// PC Gateway
 #define	DEV_FUNC_NMEA_ALOG	131	// NMEA 2000 to Analog Gateway
 #define	DEV_FUNC_ALOG_NMEA	132	// Analog to NMEA 2000 Gateway
@@ -270,13 +270,13 @@ enum indGroup {
 #define	DEV_FUNC_BRIDGE		150	// Bridge
 #define	DEV_FUNC_REPEAT		160	// Repeater
 
-// DEV_CLASS_ELEC_DIST
+// DEV_SYSTEM_ELEC_DIST
 #define	DEV_FUNC_BINARY		130	// Binary Event Monitor
 #define	DEV_FUNC_LOAD_CONT	140	// Load Controller
 #define	DEV_FUNC_PWR_INP		141	// AC/DC Input
 #define	DEV_FUNC_CONTROL		150	// Function Controller
 
-// DEV_CLASS_ELEC_GEN
+// DEV_SYSTEM_ELEC_GEN
 #define	DEV_FUNC_ENGINE		140	// Engine
 #define	DEV_FUNC_ALT			141	// DC Generator/Alternator
 #define	DEV_FUNC_SOLAR			142	// Solar Panel (Solar Array)
@@ -291,7 +291,7 @@ enum indGroup {
 #define	DEV_FUNC_BAT			170	// Battery
 #define	DEV_FUNC_ENG_GATE		180	// Engine Gateway
 
-// DEV_CLASS_CONTROL
+// DEV_SYSTEM_CONTROL
 #define	DEV_FUNC_FOLLOW		130	// Follow-up Controller
 #define	DEV_FUNC_MODE			140	// Mode Controller
 #define	DEV_FUNC_AUTOPILOT	150	// Autopilot
@@ -300,7 +300,7 @@ enum indGroup {
 #define	DEV_FUNC_TRIM			170	//Trim (Tabs)/Interceptors
 #define	DEV_FUNC_PITCH_ROLL	180	//Attitude (Pitch, Roll, Yaw) Control
 
-// DEV_CLASS_PROPEL
+// DEV_SYSTEM_PROPEL
 #define	DEV_FUNC_ENG_MON		30		// Engineroom Monitoring
 #define	DEV_FUNC_ENGINE		140	// Engine
 #define	DEV_FUNC_DC_ALT		141	// DC Generator/Alternator
@@ -315,7 +315,7 @@ enum indGroup {
 #define	DEV_FUNC_GAUGE_LRG	200	// Gauge Large
 #define	DEV_FUNC_GAUGE_SM		210	// Gauge Small
 
-// DEV_CLASS_NAV
+// DEV_SYSTEM_NAV
 #define	DEV_FUNC_DEPTH			130	// Bottom Depth
 #define	DEV_FUNC_SP_DEPTH		135	// Bottom Depth/Speed
 #define	DEV_FUNC_SP_DP_TEMP	136	// Bottom Depth/Speed/Temperature
@@ -335,7 +335,7 @@ enum indGroup {
 #define	DEV_FUNC_DIR			220	// Direction Finder
 #define	DEV_FUNC_V_STAT		230	// Voyage Status (What the hell does this mean?)
 
-// DEV_CLASS_COMS
+// DEV_SYSTEM_COMS
 #define	DEV_FUNC_EPIRB			130	// EPIRB
 #define	DEV_FUNC_AIS			140	// AIS
 #define	DEV_FUNC_DSC			150	// DSC
@@ -344,14 +344,14 @@ enum indGroup {
 #define	DEV_FUNC_MF_HF			180	// Radio-telephone (MF/HF)
 #define	DEV_FUNC_PHONE			190	// Radiotelephone
 
-// DEV_CLASS_SENSE_COM
+// DEV_SYSTEM_SENSE_COM
 #define	DEV_FUNC_TEMP			130	// Temperature
 #define	DEV_FUNC_PRESSURE		140	// Pressure
 #define	DEV_FUNC_LEVEL			150	// Fluid Level
 #define	DEV_FUNC_FLOW			160	// Flow
 #define	DEV_FUNC_HUMIDITY		170	// Humidity
 
-// DEV_CLASS_INST
+// DEV_SYSTEM_INST
 #define	DEV_FUNC_DATE_TIME	130	// Time/Date Systems
 #define	DEV_FUNC_VDR			140	// VDR
 #define	DEV_FUNC_INST			150	// Integrated Instrumentation
@@ -361,26 +361,26 @@ enum indGroup {
 #define	DEV_FUNC_GP_TRANS		190	// Transducer/General
 #define	DEV_FUNC_NMEA_CONV	200	// NMEA 0183 Converter
 
-// DEV_CLASS_EXT_ENV
+// DEV_SYSTEM_EXT_ENV
 #define	DEV_FUNC_ENV_AIR		130	// Atmospheric
 #define	DEV_FUNC_ENV_WATER	160	// Aquatic
 
-// DEV_CLASS_INT_ENV
+// DEV_SYSTEM_INT_ENV
 #define	DEV_FUNC_HVAC			130	// HVAC
 
-// DEV_CLASS_DECK_EQP
+// DEV_SYSTEM_DECK_EQP
 #define	DEV_FUNC_FISH_SCALE	130	// Scale (Catch)
 
-// DEV_CLASS_UI
+// DEV_SYSTEM_UI
 #define	DEV_FUNC_BTN			130	// Button Interface
 #define	DEV_FUNC_SWITCH		135	// Switch Interface
 #define	DEV_FUNC_ANALOG		140	// Analog Interface
 
-// DEV_CLASS_DISP
+// DEV_SYSTEM_DISP
 #define	DEV_FUNC_DISP			130	// Display
 #define	DEV_FUNC_ALARM			40		// Alarm Enunciator
 
-// DEV_CLASS_ENT
+// DEV_SYSTEM_ENT
 #define	DEV_FUNC_PLAYER		130	// Multimedia Player
 #define	DEV_FUNC_MEDIA_CONT	140	// Multimedia Controller
 
@@ -808,8 +808,6 @@ class msgHandler :	public linkListObj {
 				msgHandler(netObj* inNetObj);
 				~msgHandler(void);
 				
-				int	getNumBytes(void);				// These only set the value. No buffer here.
-            void	setNumBytes(int inNumBytes);	// The message class reads  and uses this.
 	virtual  bool	handleMsg(message* inMsg);		// Fill in to handle messages.
 	virtual  void	newMsg(void);						// Fill in to create messages.
 	virtual  void	sendMsg(message* inMsg);		// This one just sends messages on their way.
